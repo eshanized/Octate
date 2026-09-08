@@ -46,9 +46,10 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
       expect(ranked).toHaveLength(1);
       const finding = ranked[0]!;
 
-      // In the baseline pipeline: severity determines blocking directly!
+      // With decoupled disposition: high severity alone NO LONGER blocks!
+      // Only findings with finalDisposition === 'blocking' can block.
       const isBlockingUnderHigh = isBlockingFinding(finding, 'high');
-      expect(isBlockingUnderHigh).toBe(true);
+      expect(isBlockingUnderHigh).toBe(false);
 
       const reviewResult = {
         summary: {
@@ -85,9 +86,14 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         },
       };
 
-      // When failOnSeverity is 'high', the exit code is 1 (BLOCKING) despite being a safe idiom!
+      // Safe type assertion with advisory disposition does NOT block merges (exit code 0)
       const exitCode = evaluateExitCode(reviewResult, 'high');
-      expect(exitCode).toBe(1);
+      expect(exitCode).toBe(0);
+
+      // But if a finding is legitimately assigned blocking disposition, it blocks:
+      const blockingFinding = { ...finding, finalDisposition: 'blocking' as const };
+      expect(isBlockingFinding(blockingFinding, 'high')).toBe(true);
+      expect(evaluateExitCode({ ...reviewResult, findings: [blockingFinding] }, 'high')).toBe(1);
     });
 
     it('demonstrates that the critic stage passes the finding through when critic model approves it', async () => {
@@ -154,9 +160,10 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
       expect(ranked).toHaveLength(1);
       const finding = ranked[0]!;
 
-      // In the baseline pipeline: severity === critical blocks under default policy!
+      // With decoupled disposition: critical severity alone NO LONGER blocks!
+      // Only findings with finalDisposition === 'blocking' can block.
       const isBlockingUnderDefault = isBlockingFinding(finding, 'critical');
-      expect(isBlockingUnderDefault).toBe(true);
+      expect(isBlockingUnderDefault).toBe(false);
 
       const reviewResult = {
         summary: {
@@ -193,10 +200,14 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         },
       };
 
-      // Under default threshold ('critical'), exit code is 1!
-      // A standard library subprocess call with list arguments and check=True failed CI!
+      // Under default threshold ('critical'), safe subprocess with advisory disposition yields exit code 0!
       const exitCode = evaluateExitCode(reviewResult, 'critical');
-      expect(exitCode).toBe(1);
+      expect(exitCode).toBe(0);
+
+      // But if a finding is legitimately assigned blocking disposition, it blocks:
+      const blockingFinding = { ...finding, finalDisposition: 'blocking' as const };
+      expect(isBlockingFinding(blockingFinding, 'critical')).toBe(true);
+      expect(evaluateExitCode({ ...reviewResult, findings: [blockingFinding] }, 'critical')).toBe(1);
     });
 
     it('demonstrates that critical-protected truncation unconditionally preserves the finding', () => {

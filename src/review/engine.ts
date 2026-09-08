@@ -15,11 +15,14 @@
 import { createLogger } from '../logging/index.js';
 import { executeCriticStage } from './critic.js';
 import { executeReviewDAG } from './dag.js';
+import { runDecisionGate } from './decision-gate.js';
 import { postCriticConsolidate, preCriticDeduplicate } from './dedup.js';
+import { validateAllFindingsEvidence } from './evidence-validator.js';
 import { rankAndTruncateFindings } from './ranking.js';
 import type {
   ExecutionMetadata,
   FindingCategory,
+  FindingDisposition,
   ReviewEngineInput,
   ReviewResult,
   ReviewSeverity,
@@ -53,6 +56,7 @@ export class ReviewEngine {
         summary: {
           totalFindings: 0,
           bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          byDisposition: { blocking: 0, advisory: 0, informational: 0, rejected: 0 },
           byCategory: {
             correctness: 0,
             security: 0,
@@ -94,6 +98,9 @@ export class ReviewEngine {
             ranked: 0,
             final: 0,
           },
+          rejectedFindings: [],
+          downgradedFindings: [],
+          gateDecisions: [],
         },
       };
     }
@@ -162,8 +169,20 @@ export class ReviewEngine {
       message: 'Filtering findings through Critic quality gate',
       step: { current: 7, total: 8 },
     });
+
+    // Pass 1: Deterministic Evidence Validation before Critic invocation
+    const preCriticValidation = await validateAllFindingsEvidence(preCriticFindings, {
+      repoRoot: input.repoRoot,
+      diff: input.diff,
+      changedFiles: input.changedFiles,
+    });
+    const candidateFindingsForCritic = preCriticValidation.findings.filter((f) => {
+      const res = preCriticValidation.results.get(f);
+      return res ? res.evidenceStrength > 0 : true;
+    });
+
     const criticResult = await executeCriticStage({
-      findings: preCriticFindings,
+      findings: candidateFindingsForCritic,
       repoRoot: input.repoRoot,
       diff: input.diff,
       reviewContext: input.reviewContext,
@@ -218,7 +237,7 @@ export class ReviewEngine {
     input.onProgress?.({
       stage: 'review:rank',
       status: 'complete',
-      message: `Review complete: ${rankedFindings.length} findings`,
+      message: `Ranking complete: ${rankedFindings.length} findings`,
       step: { current: 8, total: 8 },
       payload: { totalFindings: rankedFindings.length },
     });
@@ -229,6 +248,39 @@ export class ReviewEngine {
       },
       'Stage 5 (Composite Ranking & Truncation) completed'
     );
+
+    // Stage 6: Final Deterministic Decision Gate & Pass 2 Evidence Validation
+    input.signal?.throwIfAborted();
+    input.onProgress?.({
+      stage: 'review:gate',
+      status: 'start',
+      message: 'Evaluating findings against Deterministic Decision Gate',
+      step: { current: 8, total: 8 },
+    });
+
+    const postRankValidation = await validateAllFindingsEvidence(rankedFindings, {
+      repoRoot: input.repoRoot,
+      diff: input.diff,
+      changedFiles: input.changedFiles,
+    });
+
+    const gateResult = runDecisionGate(rankedFindings, postRankValidation.results, {
+      minConfidence: input.config?.minConfidence ?? 0.6,
+    });
+
+    input.onProgress?.({
+      stage: 'review:gate',
+      status: 'complete',
+      message: `Decision Gate complete (${gateResult.blockingFindings.length} blocking, ${gateResult.advisoryFindings.length} advisory)`,
+      step: { current: 8, total: 8 },
+      payload: {
+        blockingCount: gateResult.blockingFindings.length,
+        advisoryCount: gateResult.advisoryFindings.length,
+        rejectedCount: gateResult.rejectedFindings.length,
+      },
+    });
+
+    const finalFindings = gateResult.survivingFindings;
 
     // Construct ReviewSummary
     const bySeverity: Record<ReviewSeverity, number> = {
@@ -250,7 +302,7 @@ export class ReviewEngine {
     };
     const byReviewer: Record<string, number> = {};
 
-    for (const finding of rankedFindings) {
+    for (const finding of finalFindings) {
       bySeverity[finding.severity] = (bySeverity[finding.severity] ?? 0) + 1;
       byCategory[finding.category] = (byCategory[finding.category] ?? 0) + 1;
 
@@ -262,8 +314,9 @@ export class ReviewEngine {
     const durationMs = Date.now() - startTime;
 
     const summary: ReviewSummary = {
-      totalFindings: rankedFindings.length,
+      totalFindings: finalFindings.length,
       bySeverity,
+      byDisposition: gateResult.byDisposition,
       byCategory,
       byReviewer,
       filesAnalyzed: input.changedFiles.length,
@@ -301,13 +354,16 @@ export class ReviewEngine {
         criticStage2: criticResult.stage2Count,
         postCriticConsolidation: postCriticCount,
         ranked: rankedFindings.length,
-        final: rankedFindings.length,
+        final: finalFindings.length,
       },
+      rejectedFindings: gateResult.rejectedFindings,
+      downgradedFindings: gateResult.downgradedFindings,
+      gateDecisions: gateResult.gateDecisions,
     };
 
     log.info(
       {
-        totalFindings: rankedFindings.length,
+        totalFindings: finalFindings.length,
         durationMs,
         totalTokens,
       },
@@ -316,7 +372,7 @@ export class ReviewEngine {
 
     return {
       summary,
-      findings: rankedFindings,
+      findings: finalFindings,
       metadata,
     };
   }

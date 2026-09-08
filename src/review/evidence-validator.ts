@@ -12,15 +12,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { ModelEvidence, ModelFinding } from '../model/types.js';
+import type { LineInterval } from './heuristics.js';
 import type { EvidenceTier } from './types.js';
-
-/**
- * Line interval representing a contiguous range of lines.
- */
-export interface LineInterval {
-  start: number;
-  end: number;
-}
 
 /**
  * Comprehensive diff metadata per file.
@@ -230,11 +223,25 @@ export function isCommonIgnoredPath(filePath: string): boolean {
  * Parses unified diff text into detailed file metadata including added/modified intervals,
  * deleted intervals, renames, and deletions.
  */
-export function parseDetailedDiff(diff: string): ParsedDiffInfo {
+export function parseDetailedDiff(diff: string, defaultChangedFiles?: string[]): ParsedDiffInfo {
   const files = new Map<string, FileDiffMetadata>();
   const changedFiles = new Set<string>();
   const deletedFiles = new Set<string>();
   const renames = new Map<string, string>();
+
+  if (defaultChangedFiles) {
+    for (const cf of defaultChangedFiles) {
+      const norm = path.normalize(cf);
+      changedFiles.add(norm);
+      files.set(norm, {
+        status: 'modified',
+        oldPath: norm,
+        newPath: norm,
+        addedModifiedLines: [],
+        deletedLines: [],
+      });
+    }
+  }
 
   if (!diff?.trim()) {
     return { files, changedFiles, deletedFiles, renames };
@@ -258,12 +265,21 @@ export function parseDetailedDiff(diff: string): ParsedDiffInfo {
       if (match) {
         currentOldFile = path.normalize(match[1] ?? '');
         currentNewFile = path.normalize(match[2] ?? '');
+        changedFiles.add(currentNewFile);
+        currentMeta = {
+          status: 'modified',
+          oldPath: currentOldFile,
+          newPath: currentNewFile,
+          addedModifiedLines: [],
+          deletedLines: [],
+        };
+        files.set(currentNewFile, currentMeta);
       } else {
         currentOldFile = null;
         currentNewFile = null;
+        currentMeta = null;
       }
       currentStatus = 'modified';
-      currentMeta = null;
       continue;
     }
 
@@ -444,8 +460,22 @@ async function checkFileExists(
     return content !== null;
   }
 
+  // If file is explicitly in changedFiles, it exists in review scope
+  if (
+    options.changedFiles &&
+    options.changedFiles.some(
+      (cf) => path.normalize(cf) === normalizedPath || normalizedPath.endsWith(path.normalize(cf))
+    )
+  ) {
+    return true;
+  }
+
   if (options.repoRoot) {
     try {
+      const rootStat = await fs.stat(options.repoRoot).catch(() => null);
+      if (!rootStat) {
+        return true;
+      }
       const fullPath = path.resolve(options.repoRoot, normalizedPath);
       const stats = await fs.stat(fullPath);
       return stats.isFile();
@@ -588,7 +618,11 @@ export async function validateEvidenceItem(
     tier = 'baseline_context';
   } else if (isChangedFile) {
     const diffMeta = parsedDiff.files.get(normalizedFile);
-    if (diffMeta && intervalsOverlap(startLine, endLine, diffMeta.addedModifiedLines)) {
+    if (
+      !diffMeta ||
+      diffMeta.addedModifiedLines.length === 0 ||
+      intervalsOverlap(startLine, endLine, diffMeta.addedModifiedLines)
+    ) {
       tier = 'direct_changed';
     } else {
       tier = 'indirect_context';
@@ -639,7 +673,7 @@ export async function validateFindingEvidence(
   options: EvidenceValidatorOptions,
   parsedDiff?: ParsedDiffInfo | undefined
 ): Promise<EvidenceValidationResult> {
-  const diffInfo = parsedDiff ?? parseDetailedDiff(options.diff ?? '');
+  const diffInfo = parsedDiff ?? parseDetailedDiff(options.diff ?? '', options.changedFiles);
   const issues: string[] = [];
 
   // 1. Primary anchor verification
@@ -702,9 +736,21 @@ export async function validateFindingEvidence(
   // Check if primary anchor itself is in changed lines
   let primaryInDiff = false;
   const normFindingFile = path.normalize(finding.file).replace(/^[/\\]+/, '');
+  const isPrimaryChanged =
+    diffInfo.changedFiles.has(normFindingFile) ||
+    (options.changedFiles &&
+      options.changedFiles.some(
+        (cf) => path.normalize(cf) === normFindingFile || normFindingFile.endsWith(path.normalize(cf))
+      ));
   const diffMeta = diffInfo.files.get(normFindingFile);
-  if (diffMeta && intervalsOverlap(finding.startLine, finding.endLine ?? finding.startLine, diffMeta.addedModifiedLines)) {
-    primaryInDiff = true;
+  if (isPrimaryChanged) {
+    if (
+      !diffMeta ||
+      diffMeta.addedModifiedLines.length === 0 ||
+      intervalsOverlap(finding.startLine, finding.endLine ?? finding.startLine, diffMeta.addedModifiedLines)
+    ) {
+      primaryInDiff = true;
+    }
   }
 
   // 3. Compute deterministic evidence strength (0 to 100)
@@ -769,7 +815,7 @@ export async function validateAllFindingsEvidence(
   findings: ModelFinding[];
   results: Map<ModelFinding, EvidenceValidationResult>;
 }> {
-  const parsedDiff = parseDetailedDiff(options.diff ?? '');
+  const parsedDiff = parseDetailedDiff(options.diff ?? '', options.changedFiles);
   const results = new Map<ModelFinding, EvidenceValidationResult>();
   const updatedFindings: ModelFinding[] = [];
 

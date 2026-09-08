@@ -39,7 +39,7 @@ export interface ReviewerProvenance {
 export interface GateDecisionLog {
   findingId: string;
   finalDisposition: FindingDisposition;
-  modelSuggestedDisposition?: FindingDisposition;
+  modelSuggestedDisposition?: FindingDisposition | undefined;
   reasons: string[];
   passedChecks: string[];
   failedChecks: string[];

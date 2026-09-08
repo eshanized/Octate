@@ -58,7 +58,7 @@ export function createMockFinding(
     failureMechanism: `A test failure mechanism with severity ${severity}`,
     trigger: 'Test input triggering failure condition',
     requiredFix: 'Add null check',
-    finalDisposition: severity === 'critical' ? 'blocking' : 'advisory',
+    finalDisposition: 'blocking',
     introducedByPatch: 'introduced_by_patch',
     criticDecision: 'approved',
     provenance: [

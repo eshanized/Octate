@@ -33,6 +33,10 @@ export function isBlockingFinding(
   if (threshold === 'none' || threshold === 'off') {
     return false;
   }
+  // Hard constraint: only findings with finalDisposition === 'blocking' can block merges
+  if (finding.finalDisposition !== 'blocking') {
+    return false;
+  }
   const findingLevel = SEVERITY_LEVELS[finding.severity] ?? 0;
   const thresholdLevel = SEVERITY_LEVELS[threshold] ?? 5;
   return findingLevel >= thresholdLevel;
