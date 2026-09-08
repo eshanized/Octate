@@ -11,6 +11,10 @@ export const ModelEvidenceSchema = z
     endLine: z.number().int().min(1, 'endLine must be >= 1'),
     relationship: z.string().default(''),
     explanation: z.string().default(''),
+    tier: z
+      .enum(['direct_changed', 'indirect_context', 'baseline_context', 'supporting_context'])
+      .default('direct_changed'),
+    causalLink: z.string().default(''),
   })
   .strip();
 
@@ -43,6 +47,26 @@ export const ModelFindingSchema = z
     impact: z.string().default(''),
     suggestedFix: z.string().default(''),
     reviewer: z.string().default('unknown'),
+    claim: z.string().default(''),
+    failureMechanism: z.string().default(''),
+    trigger: z.string().default(''),
+    requiredFix: z.string().default(''),
+    modelSuggestedDisposition: z
+      .enum(['blocking', 'advisory', 'informational', 'rejected'])
+      .optional(),
+    introducedByPatch: z
+      .enum([
+        'introduced_by_patch',
+        'worsened_by_patch',
+        'pre_existing',
+        'fixed_by_patch',
+        'unrelated_to_patch',
+        'unknown',
+      ])
+      .default('unknown'),
+    criticDecision: z.enum(['approved', 'rejected', 'uncertain']).default('uncertain'),
+    criticReason: z.string().optional(),
+    contradictions: z.array(z.string()).default([]),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strip();
@@ -186,6 +210,23 @@ export const FINDINGS_OUTPUT_SCHEMA = JSON.stringify(
               type: 'string',
               enum: ['structural', 'semantic', 'security'],
               description: 'Reviewer role that originated this finding',
+            },
+            claim: {
+              type: 'string',
+              description: 'Concrete, verifiable claim stating exactly what defect is present',
+            },
+            failureMechanism: {
+              type: 'string',
+              description: 'Detailed technical explanation of how the failure executes',
+            },
+            trigger: {
+              type: 'string',
+              description: 'Specific input condition or state that causes the failure',
+            },
+            modelSuggestedDisposition: {
+              type: 'string',
+              enum: ['blocking', 'advisory', 'informational', 'rejected'],
+              description: 'Suggested workflow disposition (subject to deterministic gate verification)',
             },
           },
           required: ['severity', 'category', 'title', 'message', 'file', 'startLine', 'endLine'],

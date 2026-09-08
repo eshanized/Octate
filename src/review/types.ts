@@ -10,6 +10,41 @@ import type { Diagnostic, ModelFinding, ReviewModel } from '../model/types.js';
 
 export type ReviewSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 
+export type FindingDisposition = 'blocking' | 'advisory' | 'informational' | 'rejected';
+
+export type EvidenceTier =
+  | 'direct_changed'
+  | 'indirect_context'
+  | 'baseline_context'
+  | 'supporting_context';
+
+export type PatchAttribution =
+  | 'introduced_by_patch'
+  | 'worsened_by_patch'
+  | 'pre_existing'
+  | 'fixed_by_patch'
+  | 'unrelated_to_patch'
+  | 'unknown';
+
+export type CriticDecision = 'approved' | 'rejected' | 'uncertain';
+
+export interface ReviewerProvenance {
+  reviewer: string;
+  role: string;
+  confidence: number;
+  assignedSeverity: ReviewSeverity;
+  timestamp: string;
+}
+
+export interface GateDecisionLog {
+  findingId: string;
+  finalDisposition: FindingDisposition;
+  modelSuggestedDisposition?: FindingDisposition;
+  reasons: string[];
+  passedChecks: string[];
+  failedChecks: string[];
+}
+
 export type FindingCategory =
   | 'correctness'
   | 'security'
@@ -34,7 +69,7 @@ export interface ScoreBreakdown {
 
 /**
  * Enriched finding with composite confidence-weighted score, blast radius,
- * and reviewer attribution.
+ * reviewer attribution, and deterministic disposition.
  */
 export interface RankedFinding extends ModelFinding {
   /** Deterministic SHA256 identifier (file:startLine:category:title) */
@@ -49,8 +84,30 @@ export interface RankedFinding extends ModelFinding {
   evidenceStrength: number;
   /** Reviewers that contributed to this finding */
   contributingReviewers: string[];
+  /** Concrete claim stated by finding */
+  claim: string;
+  /** Technical failure mechanism */
+  failureMechanism: string;
+  /** Specific input condition or execution state */
+  trigger: string;
+  /** Concrete required fix */
+  requiredFix: string;
+  /** Suggested disposition by model (optional signal) */
+  modelSuggestedDisposition?: FindingDisposition | undefined;
+  /** Final deterministic disposition computed by decision gate */
+  finalDisposition: FindingDisposition;
+  /** Patch attribution relative to baseline */
+  introducedByPatch: PatchAttribution;
+  /** Critic stage verification outcome */
+  criticDecision: CriticDecision;
+  /** Critic technical justification */
+  criticReason?: string | undefined;
+  /** Full reviewer provenance trail */
+  provenance: ReviewerProvenance[];
+  /** Documented contradictions from static analysis or reviewers */
+  contradictions?: string[] | undefined;
   /** Compatibility alias for startLine */
-  line?: number;
+  line?: number | undefined;
 }
 
 /**
@@ -59,6 +116,7 @@ export interface RankedFinding extends ModelFinding {
 export interface ReviewSummary {
   totalFindings: number;
   bySeverity: Record<ReviewSeverity, number>;
+  byDisposition?: Record<FindingDisposition, number> | undefined;
   byCategory: Record<FindingCategory, number>;
   byReviewer: Record<string, number>;
   filesAnalyzed: number;
@@ -99,6 +157,9 @@ export interface ExecutionMetadata {
   postCriticFindingCount: number;
   stageCounts?: ReviewStageCounts | undefined;
   timings?: StageTimings | undefined;
+  rejectedFindings?: RankedFinding[] | undefined;
+  downgradedFindings?: RankedFinding[] | undefined;
+  gateDecisions?: GateDecisionLog[] | undefined;
 }
 
 /**

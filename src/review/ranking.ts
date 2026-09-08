@@ -309,9 +309,24 @@ export function rankAndTruncateFindings(params: RankingParams): RankedFinding[] 
       (f as { contributingReviewers?: string[] }).contributingReviewers ??
       (f.reviewer ? [f.reviewer] : ['reviewer']);
 
+    const finalDisposition: import('./types.js').FindingDisposition =
+      (f as { finalDisposition?: import('./types.js').FindingDisposition }).finalDisposition ??
+      'advisory';
+
     return {
       ...f,
       id,
+      claim: f.claim ?? f.title,
+      failureMechanism: f.failureMechanism ?? f.message,
+      trigger: f.trigger ?? '',
+      requiredFix: f.requiredFix ?? f.suggestedFix ?? '',
+      modelSuggestedDisposition: f.modelSuggestedDisposition,
+      finalDisposition,
+      introducedByPatch: f.introducedByPatch ?? 'unknown',
+      criticDecision: f.criticDecision ?? 'uncertain',
+      criticReason: f.criticReason,
+      provenance: (f as { provenance?: import('./types.js').ReviewerProvenance[] }).provenance ?? [],
+      contradictions: f.contradictions ?? [],
       compositeScore,
       scoreBreakdown,
       blastRadius,

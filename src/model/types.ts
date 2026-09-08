@@ -12,6 +12,16 @@ export interface ModelUsage {
   totalTokens: number;
 }
 
+export interface ModelEvidence {
+  file: string;
+  startLine: number;
+  endLine: number;
+  relationship: string;
+  explanation: string;
+  tier?: 'direct_changed' | 'indirect_context' | 'baseline_context' | 'supporting_context' | undefined;
+  causalLink?: string | undefined;
+}
+
 /**
  * Represents a single finding from the model.
  */
@@ -38,18 +48,23 @@ export interface ModelFinding {
   impact: string;
   suggestedFix: string;
   reviewer: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Evidence supporting a finding.
- */
-export interface ModelEvidence {
-  file: string;
-  startLine: number;
-  endLine: number;
-  relationship: string;
-  explanation: string;
+  claim?: string | undefined;
+  failureMechanism?: string | undefined;
+  trigger?: string | undefined;
+  requiredFix?: string | undefined;
+  modelSuggestedDisposition?: 'blocking' | 'advisory' | 'informational' | 'rejected' | undefined;
+  introducedByPatch?:
+    | 'introduced_by_patch'
+    | 'worsened_by_patch'
+    | 'pre_existing'
+    | 'fixed_by_patch'
+    | 'unrelated_to_patch'
+    | 'unknown'
+    | undefined;
+  criticDecision?: 'approved' | 'rejected' | 'uncertain' | undefined;
+  criticReason?: string | undefined;
+  contradictions?: string[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**

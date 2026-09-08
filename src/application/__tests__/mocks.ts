@@ -54,6 +54,22 @@ export function createMockFinding(
     evidenceStrength: 80,
     contributingReviewers: ['structural'],
     line: 10,
+    claim: `Sample ${severity} finding claim`,
+    failureMechanism: `A test failure mechanism with severity ${severity}`,
+    trigger: 'Test input triggering failure condition',
+    requiredFix: 'Add null check',
+    finalDisposition: severity === 'critical' ? 'blocking' : 'advisory',
+    introducedByPatch: 'introduced_by_patch',
+    criticDecision: 'approved',
+    provenance: [
+      {
+        reviewer: 'structural',
+        role: 'structural',
+        confidence: 0.85,
+        assignedSeverity: severity,
+        timestamp: new Date().toISOString(),
+      },
+    ],
     ...overrides,
   };
 }

@@ -57,6 +57,22 @@ function createMockFinding(
     blastRadius: 80,
     evidenceStrength: 90,
     contributingReviewers: ['security'],
+    claim: 'Security Vulnerability claim',
+    failureMechanism: 'Detailed technical failure mechanism',
+    trigger: 'Malicious input trigger',
+    requiredFix: 'Fix it immediately',
+    finalDisposition: severity === 'critical' ? 'blocking' : 'advisory',
+    introducedByPatch: 'introduced_by_patch',
+    criticDecision: 'approved',
+    provenance: [
+      {
+        reviewer: 'security',
+        role: 'security',
+        confidence: 0.95,
+        assignedSeverity: severity,
+        timestamp: new Date().toISOString(),
+      },
+    ],
   };
 }
 
