@@ -183,6 +183,18 @@ async function main() {
   console.log(
     `  • Total False Negatives   : ${scorecard.falseNegatives === 0 ? pc.green(0) : pc.red(scorecard.falseNegatives)}`
   );
+  console.log(
+    `  • Blocking False Positives: ${scorecard.blockingFalsePositives === 0 ? pc.bold(pc.green(0)) : pc.bold(pc.red(scorecard.blockingFalsePositives))}`
+  );
+  console.log(
+    `  • Blocking FP Rate        : ${scorecard.blockingFalsePositiveRate === 0 ? pc.bold(pc.green('0.0% (Zero Blocking False Positives)')) : pc.bold(pc.red(formatPercent(scorecard.blockingFalsePositiveRate)))}`
+  );
+  if (scorecard.dispositionBreakdown) {
+    const d = scorecard.dispositionBreakdown;
+    console.log(
+      `  • Gate Dispositions       : Blocking: ${pc.cyan(d.blocking)} | Advisory: ${pc.cyan(d.advisory)} | Info: ${pc.cyan(d.informational)} | Rejected: ${pc.dim(d.rejected)}`
+    );
+  }
 
   if (scorecard.mode === 'live_pipeline') {
     console.log(
@@ -275,6 +287,9 @@ async function main() {
         precision: scorecard.precision,
         recall: scorecard.recall,
         falsePositiveRate: scorecard.falsePositiveRate,
+        blockingFalsePositives: scorecard.blockingFalsePositives,
+        blockingFalsePositiveRate: scorecard.blockingFalsePositiveRate,
+        dispositionBreakdown: scorecard.dispositionBreakdown,
         latencyMs: scorecard.latencyMs,
         p50LatencyMs: scorecard.p50LatencyMs,
         p95LatencyMs: scorecard.p95LatencyMs,
@@ -333,6 +348,9 @@ ${
 | **Precision** | >= 70.0% | **${(scorecard.precision * 100).toFixed(1)}%** ${!isLive ? '(Mock Harness Only)' : ''} | ${scorecard.precision >= 0.7 ? '✅ PASSED' : '❌ FAILED'} |
 | **Recall** | >= 70.0% | **${(scorecard.recall * 100).toFixed(1)}%** ${!isLive ? '(Mock Harness Only)' : ''} | ${scorecard.recall >= 0.7 ? '✅ PASSED' : '❌ FAILED'} |
 | **False-Positive Rate** | <= 30.0% | **${(scorecard.falsePositiveRate * 100).toFixed(1)}%** ${!isLive ? '(Mock Harness Only)' : ''} | ${scorecard.falsePositiveRate <= 0.3 ? '✅ PASSED' : '❌ FAILED'} |
+| **Blocking False Positives** | 0 | **${scorecard.blockingFalsePositives}** | ${scorecard.blockingFalsePositives === 0 ? '✅' : '❌'} |
+| **Blocking False-Positive Rate** | 0.0% | **${(scorecard.blockingFalsePositiveRate * 100).toFixed(1)}%** | ${scorecard.blockingFalsePositiveRate === 0 ? '✅ PASSED' : '❌ FAILED'} |
+| **Gate Dispositions** | — | **Blocking: ${scorecard.dispositionBreakdown?.blocking ?? 0}, Advisory: ${scorecard.dispositionBreakdown?.advisory ?? 0}, Info: ${scorecard.dispositionBreakdown?.informational ?? 0}, Rejected: ${scorecard.dispositionBreakdown?.rejected ?? 0}** | ✅ |
 | **p50 Latency** | < 30,000 ms | **${scorecard.p50LatencyMs} ms** | ${scorecard.p50LatencyMs < 30000 ? '✅ PASSED' : '❌ FAILED'} |
 | **p95 Latency** | < 30,000 ms | **${scorecard.p95LatencyMs} ms** | ${scorecard.p95LatencyMs < 30000 ? '✅ PASSED' : '❌ FAILED'} |
 | **Total Tokens Consumed** | < 64,000 tokens | **${scorecard.totalTokens} tokens** | ${scorecard.totalTokens < 64000 ? '✅' : '⚠️ High'} |

@@ -1,16 +1,14 @@
 # Octate Evaluation & Benchmark Report
 
 **Benchmark Date:** 2026-09-13  
-**Evaluation Mode:** **HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE**  
-**Provider:** `mock`  
-**Model:** `mock-nemotron`  
-**Endpoint:** `mock://local`  
-**Total Model Requests:** `34`  
-**Overall Status:** ✅ PASSED  
+**Evaluation Mode:** **LIVE PIPELINE EVALUATION**  
+**Provider:** `nvidia`  
+**Model:** `nvidia/nemotron-3-ultra-550b-a55b`  
+**Endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`  
+**Total Model Requests:** `20`  
+**Overall Status:** ❌ FAILED  
 
-> **HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE**
->
-> **Methodological Note:** This evaluation was executed in **Harness Integrity Mode** using `MockReviewModel`. These figures verify testbed plumbing, schema contracts, diff scoping, and semantic matchers only, and **MUST NOT** be cited as evidence of Octate's live AI detection quality.
+> **Methodological Note:** This evaluation was executed using live inference against NVIDIA's API on isolated Git repositories with realistic diff scopes. Results reflect genuine empirical review quality.
 
 ---
 
@@ -18,21 +16,24 @@
 
 | Metric | Target | Result | Status |
 | :--- | :--- | :--- | :--- |
-| **Evaluation Mode** | — | **HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE** | — |
-| **Provider** | NVIDIA | **mock** | ✅ |
-| **Model** | Nemotron 3 Ultra | **mock-nemotron** | ✅ |
-| **Total Requests** | — | **34** | — |
-| **True Positives** | > 0 | **4** | ✅ |
+| **Evaluation Mode** | — | **LIVE PIPELINE EVALUATION (nvidia: nvidia/nemotron-3-ultra-550b-a55b)** | — |
+| **Provider** | NVIDIA | **nvidia** | ✅ |
+| **Model** | Nemotron 3 Ultra | **nvidia/nemotron-3-ultra-550b-a55b** | ✅ |
+| **Total Requests** | — | **20** | — |
+| **True Positives** | > 0 | **2** | ✅ |
 | **False Positives** | 0 | **0** | ✅ |
 | **False Negatives** | 0 | **0** | ✅ |
-| **Precision** | >= 70.0% | **100.0%** (Mock Harness Only) | ✅ PASSED |
-| **Recall** | >= 70.0% | **100.0%** (Mock Harness Only) | ✅ PASSED |
-| **False-Positive Rate** | <= 30.0% | **0.0%** (Mock Harness Only) | ✅ PASSED |
-| **p50 Latency** | < 30,000 ms | **1699 ms** | ✅ PASSED |
-| **p95 Latency** | < 30,000 ms | **2563 ms** | ✅ PASSED |
-| **Total Tokens Consumed** | < 64,000 tokens | **4020 tokens** | ✅ |
-| **API Failures** | 0 | **0** | ✅ |
-| **Timeouts** | 0 | **0** | ✅ |
+| **Precision** | >= 70.0% | **100.0%**  | ✅ PASSED |
+| **Recall** | >= 70.0% | **100.0%**  | ✅ PASSED |
+| **False-Positive Rate** | <= 30.0% | **0.0%**  | ✅ PASSED |
+| **Blocking False Positives** | 0 | **0** | ✅ |
+| **Blocking False-Positive Rate** | 0.0% | **0.0%** | ✅ PASSED |
+| **Gate Dispositions** | — | **Blocking: 0, Advisory: 2, Info: 0, Rejected: 0** | ✅ |
+| **p50 Latency** | < 30,000 ms | **366226 ms** | ❌ FAILED |
+| **p95 Latency** | < 30,000 ms | **458257 ms** | ❌ FAILED |
+| **Total Tokens Consumed** | < 64,000 tokens | **55863 tokens** | ✅ |
+| **API Failures** | 0 | **4** | ❌ |
+| **Timeouts** | 0 | **3** | ❌ |
 
 ---
 
@@ -40,14 +41,9 @@
 
 | Fixture | Language | Category | Detected (TP) | False Positives | Reviewer Counts | Critic Retained | Latency | Tokens | Diff Lines (V / C) | Passed |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `security/command-injection` | python | security | ✅ Yes (1) | 0 (Clean) | structural:1 | 1 | 273ms | 945 | +12 / +14 | ✅ |
-| `security/sql-clean-type-assertion` | typescript | security | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 2292ms | 450 | +8 / +8 | ✅ |
-| `security/sql-injection` | typescript | security | ✅ Yes (1) | 0 (Clean) | structural:1 | 1 | 1683ms | 945 | +8 / +8 | ✅ |
-| `structural/resource-leak` | typescript | structural | ✅ Yes (1) | 0 (Clean) | structural:1 | 1 | 1603ms | 690 | +9 / +15 | ✅ |
-| `semantic/logic-regression` | typescript | semantic | ✅ Yes (1) | 0 (Clean) | structural:1 | 1 | 1699ms | 690 | +13 / +13 | ✅ |
-| `refactor/unrelated-refactor` | typescript | refactor | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 2563ms | 300 | +7 / +7 | ✅ |
-| `docs/documentation-only` | markdown | docs | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 47ms | 0 | +5 / +5 | ✅ |
-| `test/test-only` | typescript | test | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 2007ms | 0 | +6 / +6 | ✅ |
+| `security/command-injection` | python | security | ✅ Yes (1) | 0 (Clean) | security:1 | 1 | 366226ms | 16738 | +12 / +14 | ❌ |
+| `security/sql-clean-type-assertion` | typescript | security | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 458257ms | 16487 | +8 / +8 | ✅ |
+| `security/sql-injection` | typescript | security | ✅ Yes (1) | 0 (Clean) | security:1 | 1 | 258565ms | 22638 | +8 / +8 | ✅ |
 
 ---
 

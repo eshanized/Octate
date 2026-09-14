@@ -3,7 +3,7 @@
  * Supports distinct modes for Harness Integrity (Mock) and Live Pipeline Evaluation (Real LLM).
  */
 
-import type { RankedFinding } from '../../src/review/types.js';
+import type { FindingDisposition, RankedFinding } from '../../src/review/types.js';
 
 export type EvaluationMode = 'harness_mock' | 'live_pipeline';
 
@@ -51,6 +51,9 @@ export interface EvaluationResult {
   precision: number;
   recall: number;
   falsePositiveRate: number;
+  blockingFalsePositives: number;
+  blockingFalsePositiveRate: number;
+  dispositionBreakdown: Record<FindingDisposition, number>;
   vulnerableFindings: RankedFinding[];
   cleanFindings: RankedFinding[];
   matchedFindings: RankedFinding[];
@@ -89,6 +92,9 @@ export interface EvaluationScorecard {
   precision: number;
   recall: number;
   falsePositiveRate: number;
+  blockingFalsePositives: number;
+  blockingFalsePositiveRate: number;
+  dispositionBreakdown: Record<FindingDisposition, number>;
   totalPromptTokens: number;
   totalCompletionTokens: number;
   totalTokens: number;

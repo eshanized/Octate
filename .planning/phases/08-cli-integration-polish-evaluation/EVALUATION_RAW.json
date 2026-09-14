@@ -1,37 +1,45 @@
 {
   "date": "2026-09-13",
-  "mode": "harness_mock",
-  "modeLabel": "HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE",
-  "provider": "mock",
-  "model": "mock-nemotron",
-  "endpoint": "mock://local",
-  "totalRequests": 34,
+  "mode": "live_pipeline",
+  "modeLabel": "LIVE PIPELINE EVALUATION (nvidia: nvidia/nemotron-3-ultra-550b-a55b)",
+  "provider": "nvidia",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+  "totalRequests": 20,
   "summary": {
-    "truePositives": 4,
+    "truePositives": 2,
     "falsePositives": 0,
     "falseNegatives": 0,
     "precision": 1,
     "recall": 1,
     "falsePositiveRate": 0,
-    "latencyMs": 12180,
-    "p50LatencyMs": 1699,
-    "p95LatencyMs": 2563,
-    "totalTokens": 4020,
-    "totalPromptTokens": 2680,
-    "totalCompletionTokens": 1340,
-    "apiFailures": 0,
-    "timeoutCount": 0,
-    "passed": true
+    "blockingFalsePositives": 0,
+    "blockingFalsePositiveRate": 0,
+    "dispositionBreakdown": {
+      "blocking": 0,
+      "advisory": 2,
+      "informational": 0,
+      "rejected": 0
+    },
+    "latencyMs": 1083060,
+    "p50LatencyMs": 366226,
+    "p95LatencyMs": 458257,
+    "totalTokens": 55863,
+    "totalPromptTokens": 40024,
+    "totalCompletionTokens": 15839,
+    "apiFailures": 4,
+    "timeoutCount": 3,
+    "passed": false
   },
   "fixtures": [
     {
       "fixtureName": "security/command-injection",
       "category": "security",
       "language": "python",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
       "detectedExpected": true,
       "truePositives": 1,
       "falsePositives": 0,
@@ -39,51 +47,85 @@
       "precision": 1,
       "recall": 1,
       "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 1,
+        "informational": 0,
+        "rejected": 0
+      },
       "vulnerableFindings": [
         {
           "severity": "critical",
           "category": "security",
-          "title": "SECURITY defect: command",
-          "message": "Identified critical issue in scripts/reporter.py around line 13",
+          "title": "Command injection vulnerability in view_audit_log",
+          "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
           "file": "scripts/reporter.py",
-          "startLine": 13,
-          "endLine": 16,
-          "confidence": 0.9,
+          "startLine": 12,
+          "endLine": 14,
+          "confidence": 1,
           "evidence": [
             {
               "file": "scripts/reporter.py",
-              "startLine": 13,
-              "endLine": 16,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
+              "startLine": 12,
+              "endLine": 14,
+              "relationship": "direct",
+              "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 16,
+              "endLine": 18,
+              "relationship": "entry_point",
+              "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+              "tier": "direct_changed",
+              "causalLink": ""
             }
           ],
           "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
+          "relatedSymbols": [
+            "view_audit_log",
+            "get_log_directory",
+            "os.system"
+          ],
+          "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
+          "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+          "reviewer": "security",
+          "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+          "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
+          "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "structural"
+            "security"
           ],
           "metadata": {
             "contributingReviewers": [
-              "structural"
+              "security"
             ]
           },
-          "id": "937662bd1ace9121",
-          "compositeScore": 69.25,
+          "id": "51bd037590fd4697",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 75.75,
           "scoreBreakdown": {
             "severityScore": 100,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
+            "confidenceScore": 100,
+            "evidenceStrengthScore": 75,
             "blastRadiusScore": 10,
             "securityImpactScore": 100,
             "regressionProbabilityScore": 30
           },
           "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 13
+          "evidenceStrength": 75,
+          "line": 12
         }
       ],
       "cleanFindings": [],
@@ -91,47 +133,73 @@
         {
           "severity": "critical",
           "category": "security",
-          "title": "SECURITY defect: command",
-          "message": "Identified critical issue in scripts/reporter.py around line 13",
+          "title": "Command injection vulnerability in view_audit_log",
+          "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
           "file": "scripts/reporter.py",
-          "startLine": 13,
-          "endLine": 16,
-          "confidence": 0.9,
+          "startLine": 12,
+          "endLine": 14,
+          "confidence": 1,
           "evidence": [
             {
               "file": "scripts/reporter.py",
-              "startLine": 13,
-              "endLine": 16,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
+              "startLine": 12,
+              "endLine": 14,
+              "relationship": "direct",
+              "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 16,
+              "endLine": 18,
+              "relationship": "entry_point",
+              "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+              "tier": "direct_changed",
+              "causalLink": ""
             }
           ],
           "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
+          "relatedSymbols": [
+            "view_audit_log",
+            "get_log_directory",
+            "os.system"
+          ],
+          "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
+          "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+          "reviewer": "security",
+          "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+          "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
+          "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "structural"
+            "security"
           ],
           "metadata": {
             "contributingReviewers": [
-              "structural"
+              "security"
             ]
           },
-          "id": "937662bd1ace9121",
-          "compositeScore": 69.25,
+          "id": "51bd037590fd4697",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 75.75,
           "scoreBreakdown": {
             "severityScore": 100,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
+            "confidenceScore": 100,
+            "evidenceStrengthScore": 75,
             "blastRadiusScore": 10,
             "securityImpactScore": 100,
             "regressionProbabilityScore": 30
           },
           "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 13
+          "evidenceStrength": 75,
+          "line": 12
         }
       ],
       "unmatchedFindings": [],
@@ -139,43 +207,64 @@
       "actualFindings": 1,
       "expectedFindings": 1,
       "negativeFindings": 0,
-      "latencyMs": 273,
-      "vulnerableLatencyMs": 117,
-      "cleanLatencyMs": 74,
-      "promptTokens": 630,
-      "completionTokens": 315,
-      "totalTokens": 945,
+      "latencyMs": 366226,
+      "vulnerableLatencyMs": 126044,
+      "cleanLatencyMs": 240090,
+      "promptTokens": 11689,
+      "completionTokens": 5049,
+      "totalTokens": 16738,
       "requestCount": 7,
-      "apiFailures": 0,
-      "timeoutCount": 0,
+      "apiFailures": 4,
+      "timeoutCount": 3,
       "byReviewer": {
-        "structural": 1
+        "security": 1
       },
       "reviewerSpecificFindings": {
         "critic": [
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: command",
-            "message": "Identified critical issue in scripts/reporter.py around line 13",
+            "title": "Command injection vulnerability in view_audit_log",
+            "message": "The function view_audit_log directly interpolates user-controlled input into a shell command via os.system without validation or sanitization. An attacker can execute arbitrary commands by passing shell metacharacters (e.g., '; rm -rf /', '&& cat /etc/passwd').",
             "file": "scripts/reporter.py",
-            "startLine": 13,
-            "endLine": 16,
-            "confidence": 0.9,
+            "startLine": 12,
+            "endLine": 14,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "scripts/reporter.py",
-                "startLine": 13,
-                "endLine": 16,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 12,
+                "endLine": 14,
+                "relationship": "direct",
+                "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "scripts/reporter.py",
+                "startLine": 16,
+                "endLine": 18,
+                "relationship": "entry_point",
+                "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
+            "relatedSymbols": [
+              "view_audit_log"
+            ],
+            "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, or establish persistence.",
+            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric only). Example: subprocess.run(['cat', os.path.join('/var/log', user_file)], check=True) after validating user_file matches ^[a-zA-Z0-9_.-]+$.",
             "reviewer": "structural",
+            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+            "failureMechanism": "When user_file contains shell metacharacters (e.g., 'log.txt; cat /etc/passwd'), the shell interprets them as command separators, executing the injected command with the script's privileges.",
+            "trigger": "Passing a filename argument containing shell metacharacters (e.g., ';', '&&', '|', '$()', '`') to the script via command line.",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-critic-0",
             "finalRank": 1,
             "status": "open"
@@ -183,26 +272,48 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: command",
-            "message": "Identified critical issue in scripts/reporter.py around line 13",
+            "title": "Command injection vulnerability in view_audit_log",
+            "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
             "file": "scripts/reporter.py",
-            "startLine": 13,
-            "endLine": 16,
-            "confidence": 0.9,
+            "startLine": 12,
+            "endLine": 14,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "scripts/reporter.py",
-                "startLine": 13,
-                "endLine": 16,
+                "startLine": 12,
+                "endLine": 14,
+                "relationship": "direct",
+                "explanation": "Line 14 shows os.system(f\"cat /var/log/{user_file}\") where user_file is directly interpolated into the shell command without validation",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "scripts/reporter.py",
+                "startLine": 16,
+                "endLine": 18,
                 "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "explanation": "Main block passes sys.argv[1] directly to view_audit_log, making it reachable from command line",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedSymbols": [
+              "view_audit_log",
+              "get_log_directory"
+            ],
+            "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
+            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+            "reviewer": "semantic",
+            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+            "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
+            "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-critic-0",
             "finalRank": 1,
             "status": "open"
@@ -212,26 +323,48 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: command",
-            "message": "Identified critical issue in scripts/reporter.py around line 13",
+            "title": "Command Injection via Unsanitized User Input in os.system()",
+            "message": "The view_audit_log() function directly interpolates unvalidated user input (from sys.argv[1]) into a shell command executed via os.system(). This allows arbitrary command execution by passing shell metacharacters (e.g., ';', '&&', '|', '$()') in the filename argument.",
             "file": "scripts/reporter.py",
-            "startLine": 13,
-            "endLine": 16,
-            "confidence": 0.9,
+            "startLine": 12,
+            "endLine": 14,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "scripts/reporter.py",
-                "startLine": 13,
-                "endLine": 16,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 12,
+                "endLine": 14,
+                "relationship": "vulnerable_sink",
+                "explanation": "os.system() executes the interpolated string in a shell. The f-string f\"cat /var/log/{user_file}\" directly embeds user-controlled input without validation or escaping.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "scripts/reporter.py",
+                "startLine": 16,
+                "endLine": 18,
+                "relationship": "taint_source",
+                "explanation": "User input enters via sys.argv[1] at line 18 and flows directly into view_audit_log() at line 18, then into the os.system() call at line 14.",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedSymbols": [
+              "view_audit_log",
+              "os.system"
+            ],
+            "impact": "An attacker with CLI access can execute arbitrary commands with the privileges of the script (potentially root if run via sudo). Example exploit: `python reporter.py 'auth.log; cat /etc/shadow'` or `python reporter.py 'auth.log && rm -rf /'`.",
+            "suggestedFix": "Replace os.system() with subprocess.run() using a list argument (no shell=True) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Example:\n\nimport subprocess\nimport re\n\ndef view_audit_log(user_file: str) -> None:\n    if not re.match(r'^[a-zA-Z0-9._-]+$', user_file):\n        raise ValueError(\"Invalid filename\")\n    log_path = f\"/var/log/{user_file}\"\n    subprocess.run([\"cat\", log_path], check=True)",
+            "reviewer": "security",
+            "claim": "The view_audit_log function at line 12-14 passes unsanitized user input from sys.argv[1] directly into os.system(), enabling shell command injection.",
+            "failureMechanism": "When the script is invoked with a malicious argument containing shell metacharacters (e.g., 'auth.log; id'), the f-string interpolates the entire string into the shell command. The shell then parses and executes each command separated by metacharacters, running attacker-controlled code.",
+            "trigger": "Running the script with a command-line argument containing shell metacharacters: `python scripts/reporter.py 'auth.log; malicious_command'`",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-security-0",
             "finalRank": 1,
             "status": "open"
@@ -241,26 +374,49 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: command",
-            "message": "Identified critical issue in scripts/reporter.py around line 13",
+            "title": "Command injection vulnerability in view_audit_log",
+            "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
             "file": "scripts/reporter.py",
-            "startLine": 13,
-            "endLine": 16,
-            "confidence": 0.9,
+            "startLine": 12,
+            "endLine": 14,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "scripts/reporter.py",
-                "startLine": 13,
-                "endLine": 16,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 12,
+                "endLine": 14,
+                "relationship": "direct",
+                "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "scripts/reporter.py",
+                "startLine": 16,
+                "endLine": 18,
+                "relationship": "entry_point",
+                "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedSymbols": [
+              "view_audit_log",
+              "get_log_directory",
+              "os.system"
+            ],
+            "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
+            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+            "reviewer": "security",
+            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+            "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
+            "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-structural-0",
             "finalRank": 1,
             "status": "open"
@@ -270,16 +426,16 @@
       "criticRetainedCount": 1,
       "vulnerableDiffLines": 12,
       "cleanDiffLines": 14,
-      "passed": true
+      "passed": false
     },
     {
       "fixtureName": "security/sql-clean-type-assertion",
       "category": "security",
       "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
       "detectedExpected": true,
       "truePositives": 0,
       "falsePositives": 0,
@@ -287,6 +443,14 @@
       "precision": 1,
       "recall": 1,
       "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
       "vulnerableFindings": [],
       "cleanFindings": [],
       "matchedFindings": [],
@@ -295,18 +459,70 @@
       "actualFindings": 0,
       "expectedFindings": 0,
       "negativeFindings": 0,
-      "latencyMs": 2292,
-      "vulnerableLatencyMs": 1380,
-      "cleanLatencyMs": 878,
-      "promptTokens": 300,
-      "completionTokens": 150,
-      "totalTokens": 450,
+      "latencyMs": 458257,
+      "vulnerableLatencyMs": 297567,
+      "cleanLatencyMs": 160644,
+      "promptTokens": 12638,
+      "completionTokens": 3849,
+      "totalTokens": 16487,
       "requestCount": 6,
       "apiFailures": 0,
       "timeoutCount": 0,
       "byReviewer": {},
       "reviewerSpecificFindings": {
-        "critic": [],
+        "critic": [
+          {
+            "severity": "medium",
+            "category": "correctness",
+            "title": "Unsafe type assertion on database result without runtime validation",
+            "message": "The function uses `as UserRecord` type assertion on `result.rows[0]` without any runtime validation that the database row matches the UserRecord interface. If the database schema drifts (e.g., column renamed from 'id' to 'user_id', missing 'role' column, or extra columns), the returned object will not match the interface, causing downstream bugs that TypeScript cannot catch.",
+            "file": "src/db/users.ts",
+            "startLine": 19,
+            "endLine": 19,
+            "confidence": 0.85,
+            "evidence": [
+              {
+                "file": "src/db/users.ts",
+                "startLine": 3,
+                "endLine": 8,
+                "relationship": "defines expected shape",
+                "explanation": "UserRecord interface defines required fields: id, name, email, role",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "src/db/users.ts",
+                "startLine": 17,
+                "endLine": 19,
+                "relationship": "performs unsafe cast",
+                "explanation": "Query uses SELECT * and casts first row directly to UserRecord without validation",
+                "tier": "direct_changed",
+                "causalLink": ""
+              }
+            ],
+            "relatedFiles": [
+              "src/db/users.ts"
+            ],
+            "relatedSymbols": [
+              "getUserById",
+              "UserRecord"
+            ],
+            "impact": "Runtime type mismatches when database schema changes, leading to undefined property access errors in calling code that trusts the UserRecord type contract.",
+            "suggestedFix": "Add runtime validation or use a mapping function to transform the database row into a validated UserRecord. Example: `const row = result.rows[0]; if (!row) return null; return { id: row.id, name: row.name, email: row.email, role: row.role } as UserRecord;`",
+            "reviewer": "semantic",
+            "claim": "The getUserById function performs an unsafe type assertion on database results without runtime validation, creating a correctness risk if the database schema diverges from the UserRecord interface.",
+            "failureMechanism": "When the database schema changes (e.g., column rename, column removal, or type change), the SELECT * query returns rows that don't match UserRecord. The TypeScript assertion `as UserRecord` suppresses compile-time errors, but the returned object lacks expected properties or has wrong types, causing failures in downstream code that accesses properties like user.role or user.email.",
+            "trigger": "Database schema drift where the users table columns no longer match the UserRecord interface (id, name, email, role).",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "advisory",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
+            "id": "finding-critic-0",
+            "finalRank": 1,
+            "status": "open"
+          }
+        ],
         "security": []
       },
       "criticRetainedCount": 0,
@@ -318,10 +534,10 @@
       "fixtureName": "security/sql-injection",
       "category": "security",
       "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
       "detectedExpected": true,
       "truePositives": 1,
       "falsePositives": 0,
@@ -329,51 +545,86 @@
       "precision": 1,
       "recall": 1,
       "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 1,
+        "informational": 0,
+        "rejected": 0
+      },
       "vulnerableFindings": [
         {
           "severity": "critical",
           "category": "security",
-          "title": "SECURITY defect: SQL",
-          "message": "Identified critical issue in src/db/users.ts around line 16",
+          "title": "SQL Injection in getUserById via Unescaped String Interpolation",
+          "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
           "file": "src/db/users.ts",
-          "startLine": 16,
-          "endLine": 22,
-          "confidence": 0.9,
+          "startLine": 15,
+          "endLine": 20,
+          "confidence": 1,
           "evidence": [
             {
               "file": "src/db/users.ts",
-              "startLine": 16,
-              "endLine": 22,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
+              "startLine": 17,
+              "endLine": 17,
+              "relationship": "direct",
+              "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/db/users.ts",
+              "startLine": 18,
+              "endLine": 18,
+              "relationship": "direct",
+              "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+              "tier": "direct_changed",
+              "causalLink": ""
             }
           ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
+          "relatedFiles": [
+            "src/db/client.ts"
+          ],
+          "relatedSymbols": [
+            "getUserById",
+            "DatabaseClient"
+          ],
+          "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
+          "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
+          "reviewer": "security",
+          "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
+          "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
+          "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "structural"
+            "security"
           ],
           "metadata": {
             "contributingReviewers": [
-              "structural"
+              "security"
             ]
           },
-          "id": "54ad7d6272afde90",
-          "compositeScore": 69.25,
+          "id": "6f0470246fb80e7c",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 75.75,
           "scoreBreakdown": {
             "severityScore": 100,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
+            "confidenceScore": 100,
+            "evidenceStrengthScore": 75,
             "blastRadiusScore": 10,
             "securityImpactScore": 100,
             "regressionProbabilityScore": 30
           },
           "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 16
+          "evidenceStrength": 75,
+          "line": 15
         }
       ],
       "cleanFindings": [],
@@ -381,47 +632,74 @@
         {
           "severity": "critical",
           "category": "security",
-          "title": "SECURITY defect: SQL",
-          "message": "Identified critical issue in src/db/users.ts around line 16",
+          "title": "SQL Injection in getUserById via Unescaped String Interpolation",
+          "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
           "file": "src/db/users.ts",
-          "startLine": 16,
-          "endLine": 22,
-          "confidence": 0.9,
+          "startLine": 15,
+          "endLine": 20,
+          "confidence": 1,
           "evidence": [
             {
               "file": "src/db/users.ts",
-              "startLine": 16,
-              "endLine": 22,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
+              "startLine": 17,
+              "endLine": 17,
+              "relationship": "direct",
+              "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/db/users.ts",
+              "startLine": 18,
+              "endLine": 18,
+              "relationship": "direct",
+              "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+              "tier": "direct_changed",
+              "causalLink": ""
             }
           ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
+          "relatedFiles": [
+            "src/db/client.ts"
+          ],
+          "relatedSymbols": [
+            "getUserById",
+            "DatabaseClient"
+          ],
+          "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
+          "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
+          "reviewer": "security",
+          "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
+          "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
+          "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "structural"
+            "security"
           ],
           "metadata": {
             "contributingReviewers": [
-              "structural"
+              "security"
             ]
           },
-          "id": "54ad7d6272afde90",
-          "compositeScore": 69.25,
+          "id": "6f0470246fb80e7c",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 75.75,
           "scoreBreakdown": {
             "severityScore": 100,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
+            "confidenceScore": 100,
+            "evidenceStrengthScore": 75,
             "blastRadiusScore": 10,
             "securityImpactScore": 100,
             "regressionProbabilityScore": 30
           },
           "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 16
+          "evidenceStrength": 75,
+          "line": 15
         }
       ],
       "unmatchedFindings": [],
@@ -429,43 +707,67 @@
       "actualFindings": 1,
       "expectedFindings": 1,
       "negativeFindings": 0,
-      "latencyMs": 1683,
-      "vulnerableLatencyMs": 865,
-      "cleanLatencyMs": 789,
-      "promptTokens": 630,
-      "completionTokens": 315,
-      "totalTokens": 945,
+      "latencyMs": 258565,
+      "vulnerableLatencyMs": 177448,
+      "cleanLatencyMs": 81083,
+      "promptTokens": 15697,
+      "completionTokens": 6941,
+      "totalTokens": 22638,
       "requestCount": 7,
       "apiFailures": 0,
       "timeoutCount": 0,
       "byReviewer": {
-        "structural": 1
+        "security": 1
       },
       "reviewerSpecificFindings": {
         "critic": [
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: SQL",
-            "message": "Identified critical issue in src/db/users.ts around line 16",
+            "title": "SQL Injection Vulnerability in getUserById via String Interpolation",
+            "message": "The getUserById function constructs SQL queries using template literal string interpolation with unvalidated user input (userId). This allows attackers to inject arbitrary SQL by providing malicious input such as `' OR '1'='1` or `'; DROP TABLE users; --`. The code comment explicitly acknowledges this vulnerability. Parameterized queries must be used instead.",
             "file": "src/db/users.ts",
-            "startLine": 16,
-            "endLine": 22,
-            "confidence": 0.9,
+            "startLine": 15,
+            "endLine": 20,
+            "confidence": 0.98,
             "evidence": [
               {
                 "file": "src/db/users.ts",
-                "startLine": 16,
-                "endLine": 22,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 17,
+                "endLine": 17,
+                "relationship": "direct",
+                "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "src/db/users.ts",
+                "startLine": 18,
+                "endLine": 18,
+                "relationship": "direct",
+                "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
+            "relatedFiles": [
+              "src/db/client.ts"
+            ],
+            "relatedSymbols": [
+              "getUserById",
+              "DatabaseClient"
+            ],
+            "impact": "An attacker can bypass authentication, extract all user records, modify or delete database data, or execute administrative operations depending on database permissions. This is a critical security vulnerability that could lead to full database compromise.",
+            "suggestedFix": "Use parameterized queries with placeholders. Example fix:\n\nexport async function getUserById(db: DatabaseClient, userId: string): Promise<UserRecord | null> {\n  const query = 'SELECT * FROM users WHERE id = $1';\n  const result = await db.query(query, [userId]);\n  return (result.rows[0] as UserRecord) ?? null;\n}\n\nNote: The exact placeholder syntax ($1, ?, %s) depends on the database driver used in DatabaseClient.",
             "reviewer": "structural",
+            "claim": "The getUserById function at src/db/users.ts:15-20 constructs SQL queries via string interpolation of untrusted userId parameter, enabling SQL injection attacks.",
+            "failureMechanism": "When userId contains SQL metacharacters (e.g., single quotes, semicolons, comments), the interpolated query string becomes syntactically valid SQL that alters the intended query logic. For example, userId = \"' OR '1'='1\" produces: SELECT * FROM users WHERE id = '' OR '1'='1', which returns all rows.",
+            "trigger": "Any call to getUserById with a userId parameter containing SQL injection payloads such as: `' OR '1'='1`, `'; DROP TABLE users; --`, `' UNION SELECT * FROM passwords --`",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-critic-0",
             "finalRank": 1,
             "status": "open"
@@ -473,26 +775,38 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: SQL",
-            "message": "Identified critical issue in src/db/users.ts around line 16",
+            "title": "SQL Injection vulnerability in getUserById function",
+            "message": "The getUserById function constructs SQL queries via unsanitized string interpolation of the userId parameter. This allows attackers to inject arbitrary SQL code, leading to authentication bypass, data exfiltration, data manipulation, or database destruction. The inline comment explicitly acknowledges the vulnerability.",
             "file": "src/db/users.ts",
-            "startLine": 16,
-            "endLine": 22,
-            "confidence": 0.9,
+            "startLine": 15,
+            "endLine": 20,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "src/db/users.ts",
-                "startLine": 16,
-                "endLine": 22,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 17,
+                "endLine": 18,
+                "relationship": "direct",
+                "explanation": "Line 17 shows the vulnerable interpolation: `const query = `SELECT * FROM users WHERE id = '${userId}'`;`. Line 18 executes this unsanitized query via db.query().",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedSymbols": [
+              "getUserById"
+            ],
+            "impact": "Attackers can bypass authentication (e.g., userId = \"' OR '1'='1\"), extract all user records, modify/delete data, or execute administrative database operations depending on DB permissions.",
+            "suggestedFix": "Use parameterized queries / prepared statements. Example: `const result = await db.query('SELECT * FROM users WHERE id = $1', [userId]);` (adjust placeholder syntax per database driver).",
+            "reviewer": "security",
+            "claim": "The getUserById function is vulnerable to SQL injection due to unsanitized string interpolation of the userId parameter into the SQL query string.",
+            "failureMechanism": "When userId contains SQL meta-characters (e.g., single quotes, semicolons, comments), the interpolated query becomes syntactically valid SQL that alters the intended WHERE clause logic or appends additional statements.",
+            "trigger": "Any caller passing a userId containing single quotes, SQL keywords, or comment sequences (e.g., \"admin'--\", \"' OR '1'='1\").",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-critic-0",
             "finalRank": 1,
             "status": "open"
@@ -502,26 +816,47 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: SQL",
-            "message": "Identified critical issue in src/db/users.ts around line 16",
+            "title": "SQL Injection in getUserById via Unescaped String Interpolation",
+            "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
             "file": "src/db/users.ts",
-            "startLine": 16,
-            "endLine": 22,
-            "confidence": 0.9,
+            "startLine": 15,
+            "endLine": 20,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "src/db/users.ts",
-                "startLine": 16,
-                "endLine": 22,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 17,
+                "endLine": 17,
+                "relationship": "vulnerable_sink",
+                "explanation": "Line 17 constructs the SQL query using unescaped string interpolation: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - the userId parameter is directly embedded into the query string.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "src/db/users.ts",
+                "startLine": 18,
+                "endLine": 18,
+                "relationship": "execution_sink",
+                "explanation": "Line 18 executes the constructed query via `await db.query(query)` without any sanitization or parameterization.",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
             "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedSymbols": [
+              "getUserById"
+            ],
+            "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
+            "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
+            "reviewer": "security",
+            "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
+            "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
+            "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-security-0",
             "finalRank": 1,
             "status": "open"
@@ -531,26 +866,50 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "SECURITY defect: SQL",
-            "message": "Identified critical issue in src/db/users.ts around line 16",
+            "title": "SQL Injection in getUserById via Unescaped String Interpolation",
+            "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
             "file": "src/db/users.ts",
-            "startLine": 16,
-            "endLine": 22,
-            "confidence": 0.9,
+            "startLine": 15,
+            "endLine": 20,
+            "confidence": 1,
             "evidence": [
               {
                 "file": "src/db/users.ts",
-                "startLine": 16,
-                "endLine": 22,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
+                "startLine": 17,
+                "endLine": 17,
+                "relationship": "direct",
+                "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              },
+              {
+                "file": "src/db/users.ts",
+                "startLine": 18,
+                "endLine": 18,
+                "relationship": "direct",
+                "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+                "tier": "direct_changed",
+                "causalLink": ""
               }
             ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
+            "relatedFiles": [
+              "src/db/client.ts"
+            ],
+            "relatedSymbols": [
+              "getUserById",
+              "DatabaseClient"
+            ],
+            "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
+            "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
+            "reviewer": "security",
+            "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
+            "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
+            "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
             "id": "finding-structural-0",
             "finalRank": 1,
             "status": "open"
@@ -560,563 +919,6 @@
       "criticRetainedCount": 1,
       "vulnerableDiffLines": 8,
       "cleanDiffLines": 8,
-      "passed": true
-    },
-    {
-      "fixtureName": "structural/resource-leak",
-      "category": "structural",
-      "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
-      "detectedExpected": true,
-      "truePositives": 1,
-      "falsePositives": 0,
-      "falseNegatives": 0,
-      "precision": 1,
-      "recall": 1,
-      "falsePositiveRate": 0,
-      "vulnerableFindings": [
-        {
-          "severity": "high",
-          "category": "reliability",
-          "title": "RELIABILITY defect: resource",
-          "message": "Identified high issue in src/io/reader.ts around line 10",
-          "file": "src/io/reader.ts",
-          "startLine": 10,
-          "endLine": 17,
-          "confidence": 0.9,
-          "evidence": [
-            {
-              "file": "src/io/reader.ts",
-              "startLine": 10,
-              "endLine": 17,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
-            }
-          ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
-          "contributingReviewers": [
-            "structural"
-          ],
-          "metadata": {
-            "contributingReviewers": [
-              "structural"
-            ]
-          },
-          "id": "94b7987d37e153e2",
-          "compositeScore": 56.75,
-          "scoreBreakdown": {
-            "severityScore": 75,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
-            "blastRadiusScore": 10,
-            "securityImpactScore": 0,
-            "regressionProbabilityScore": 80
-          },
-          "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 10
-        }
-      ],
-      "cleanFindings": [],
-      "matchedFindings": [
-        {
-          "severity": "high",
-          "category": "reliability",
-          "title": "RELIABILITY defect: resource",
-          "message": "Identified high issue in src/io/reader.ts around line 10",
-          "file": "src/io/reader.ts",
-          "startLine": 10,
-          "endLine": 17,
-          "confidence": 0.9,
-          "evidence": [
-            {
-              "file": "src/io/reader.ts",
-              "startLine": 10,
-              "endLine": 17,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
-            }
-          ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
-          "contributingReviewers": [
-            "structural"
-          ],
-          "metadata": {
-            "contributingReviewers": [
-              "structural"
-            ]
-          },
-          "id": "94b7987d37e153e2",
-          "compositeScore": 56.75,
-          "scoreBreakdown": {
-            "severityScore": 75,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
-            "blastRadiusScore": 10,
-            "securityImpactScore": 0,
-            "regressionProbabilityScore": 80
-          },
-          "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 10
-        }
-      ],
-      "unmatchedFindings": [],
-      "rawFindingsCount": 1,
-      "actualFindings": 1,
-      "expectedFindings": 1,
-      "negativeFindings": 0,
-      "latencyMs": 1603,
-      "vulnerableLatencyMs": 812,
-      "cleanLatencyMs": 752,
-      "promptTokens": 460,
-      "completionTokens": 230,
-      "totalTokens": 690,
-      "requestCount": 5,
-      "apiFailures": 0,
-      "timeoutCount": 0,
-      "byReviewer": {
-        "structural": 1
-      },
-      "reviewerSpecificFindings": {
-        "critic": [
-          {
-            "severity": "high",
-            "category": "reliability",
-            "title": "RELIABILITY defect: resource",
-            "message": "Identified high issue in src/io/reader.ts around line 10",
-            "file": "src/io/reader.ts",
-            "startLine": 10,
-            "endLine": 17,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/io/reader.ts",
-                "startLine": 10,
-                "endLine": 17,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-critic-0",
-            "finalRank": 1,
-            "status": "open"
-          },
-          {
-            "severity": "high",
-            "category": "reliability",
-            "title": "RELIABILITY defect: resource",
-            "message": "Identified high issue in src/io/reader.ts around line 10",
-            "file": "src/io/reader.ts",
-            "startLine": 10,
-            "endLine": 17,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/io/reader.ts",
-                "startLine": 10,
-                "endLine": 17,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-critic-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ],
-        "structural": [
-          {
-            "severity": "high",
-            "category": "reliability",
-            "title": "RELIABILITY defect: resource",
-            "message": "Identified high issue in src/io/reader.ts around line 10",
-            "file": "src/io/reader.ts",
-            "startLine": 10,
-            "endLine": 17,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/io/reader.ts",
-                "startLine": 10,
-                "endLine": 17,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-structural-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ]
-      },
-      "criticRetainedCount": 1,
-      "vulnerableDiffLines": 9,
-      "cleanDiffLines": 15,
-      "passed": true
-    },
-    {
-      "fixtureName": "semantic/logic-regression",
-      "category": "semantic",
-      "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
-      "detectedExpected": true,
-      "truePositives": 1,
-      "falsePositives": 0,
-      "falseNegatives": 0,
-      "precision": 1,
-      "recall": 1,
-      "falsePositiveRate": 0,
-      "vulnerableFindings": [
-        {
-          "severity": "high",
-          "category": "correctness",
-          "title": "CORRECTNESS defect: logic",
-          "message": "Identified high issue in src/billing/pricing.ts around line 22",
-          "file": "src/billing/pricing.ts",
-          "startLine": 22,
-          "endLine": 26,
-          "confidence": 0.9,
-          "evidence": [
-            {
-              "file": "src/billing/pricing.ts",
-              "startLine": 22,
-              "endLine": 26,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
-            }
-          ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
-          "contributingReviewers": [
-            "structural"
-          ],
-          "metadata": {
-            "contributingReviewers": [
-              "structural"
-            ]
-          },
-          "id": "eb3fb79c4dba98f6",
-          "compositeScore": 57.25,
-          "scoreBreakdown": {
-            "severityScore": 75,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
-            "blastRadiusScore": 10,
-            "securityImpactScore": 0,
-            "regressionProbabilityScore": 85
-          },
-          "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 22
-        }
-      ],
-      "cleanFindings": [],
-      "matchedFindings": [
-        {
-          "severity": "high",
-          "category": "correctness",
-          "title": "CORRECTNESS defect: logic",
-          "message": "Identified high issue in src/billing/pricing.ts around line 22",
-          "file": "src/billing/pricing.ts",
-          "startLine": 22,
-          "endLine": 26,
-          "confidence": 0.9,
-          "evidence": [
-            {
-              "file": "src/billing/pricing.ts",
-              "startLine": 22,
-              "endLine": 26,
-              "relationship": "caller",
-              "explanation": "Ground truth defect location"
-            }
-          ],
-          "relatedFiles": [],
-          "relatedSymbols": [],
-          "impact": "May trigger unhandled TypeError at runtime",
-          "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-          "reviewer": "structural",
-          "contributingReviewers": [
-            "structural"
-          ],
-          "metadata": {
-            "contributingReviewers": [
-              "structural"
-            ]
-          },
-          "id": "eb3fb79c4dba98f6",
-          "compositeScore": 57.25,
-          "scoreBreakdown": {
-            "severityScore": 75,
-            "confidenceScore": 90,
-            "evidenceStrengthScore": 45,
-            "blastRadiusScore": 10,
-            "securityImpactScore": 0,
-            "regressionProbabilityScore": 85
-          },
-          "blastRadius": 10,
-          "evidenceStrength": 45,
-          "line": 22
-        }
-      ],
-      "unmatchedFindings": [],
-      "rawFindingsCount": 1,
-      "actualFindings": 1,
-      "expectedFindings": 1,
-      "negativeFindings": 0,
-      "latencyMs": 1699,
-      "vulnerableLatencyMs": 789,
-      "cleanLatencyMs": 879,
-      "promptTokens": 460,
-      "completionTokens": 230,
-      "totalTokens": 690,
-      "requestCount": 5,
-      "apiFailures": 0,
-      "timeoutCount": 0,
-      "byReviewer": {
-        "structural": 1
-      },
-      "reviewerSpecificFindings": {
-        "critic": [
-          {
-            "severity": "high",
-            "category": "correctness",
-            "title": "CORRECTNESS defect: logic",
-            "message": "Identified high issue in src/billing/pricing.ts around line 22",
-            "file": "src/billing/pricing.ts",
-            "startLine": 22,
-            "endLine": 26,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/billing/pricing.ts",
-                "startLine": 22,
-                "endLine": 26,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-critic-0",
-            "finalRank": 1,
-            "status": "open"
-          },
-          {
-            "severity": "high",
-            "category": "correctness",
-            "title": "CORRECTNESS defect: logic",
-            "message": "Identified high issue in src/billing/pricing.ts around line 22",
-            "file": "src/billing/pricing.ts",
-            "startLine": 22,
-            "endLine": 26,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/billing/pricing.ts",
-                "startLine": 22,
-                "endLine": 26,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-critic-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ],
-        "structural": [
-          {
-            "severity": "high",
-            "category": "correctness",
-            "title": "CORRECTNESS defect: logic",
-            "message": "Identified high issue in src/billing/pricing.ts around line 22",
-            "file": "src/billing/pricing.ts",
-            "startLine": 22,
-            "endLine": 26,
-            "confidence": 0.9,
-            "evidence": [
-              {
-                "file": "src/billing/pricing.ts",
-                "startLine": 22,
-                "endLine": 26,
-                "relationship": "caller",
-                "explanation": "Ground truth defect location"
-              }
-            ],
-            "relatedFiles": [],
-            "relatedSymbols": [],
-            "impact": "May trigger unhandled TypeError at runtime",
-            "suggestedFix": "if (!user) { return null; } before accessing user.profile",
-            "reviewer": "structural",
-            "id": "finding-structural-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ]
-      },
-      "criticRetainedCount": 1,
-      "vulnerableDiffLines": 13,
-      "cleanDiffLines": 13,
-      "passed": true
-    },
-    {
-      "fixtureName": "refactor/unrelated-refactor",
-      "category": "refactor",
-      "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
-      "detectedExpected": true,
-      "truePositives": 0,
-      "falsePositives": 0,
-      "falseNegatives": 0,
-      "precision": 1,
-      "recall": 1,
-      "falsePositiveRate": 0,
-      "vulnerableFindings": [],
-      "cleanFindings": [],
-      "matchedFindings": [],
-      "unmatchedFindings": [],
-      "rawFindingsCount": 0,
-      "actualFindings": 0,
-      "expectedFindings": 0,
-      "negativeFindings": 0,
-      "latencyMs": 2563,
-      "vulnerableLatencyMs": 1043,
-      "cleanLatencyMs": 1477,
-      "promptTokens": 200,
-      "completionTokens": 100,
-      "totalTokens": 300,
-      "requestCount": 4,
-      "apiFailures": 0,
-      "timeoutCount": 0,
-      "byReviewer": {},
-      "reviewerSpecificFindings": {
-        "critic": []
-      },
-      "criticRetainedCount": 0,
-      "vulnerableDiffLines": 7,
-      "cleanDiffLines": 7,
-      "passed": true
-    },
-    {
-      "fixtureName": "docs/documentation-only",
-      "category": "docs",
-      "language": "markdown",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
-      "detectedExpected": true,
-      "truePositives": 0,
-      "falsePositives": 0,
-      "falseNegatives": 0,
-      "precision": 1,
-      "recall": 1,
-      "falsePositiveRate": 0,
-      "vulnerableFindings": [],
-      "cleanFindings": [],
-      "matchedFindings": [],
-      "unmatchedFindings": [],
-      "rawFindingsCount": 0,
-      "actualFindings": 0,
-      "expectedFindings": 0,
-      "negativeFindings": 0,
-      "latencyMs": 47,
-      "vulnerableLatencyMs": 6,
-      "cleanLatencyMs": 11,
-      "promptTokens": 0,
-      "completionTokens": 0,
-      "totalTokens": 0,
-      "requestCount": 0,
-      "apiFailures": 0,
-      "timeoutCount": 0,
-      "byReviewer": {},
-      "reviewerSpecificFindings": {},
-      "criticRetainedCount": 0,
-      "vulnerableDiffLines": 5,
-      "cleanDiffLines": 5,
-      "passed": true
-    },
-    {
-      "fixtureName": "test/test-only",
-      "category": "test",
-      "language": "typescript",
-      "mode": "harness_mock",
-      "provider": "mock",
-      "model": "mock-nemotron",
-      "endpoint": "mock://local",
-      "detectedExpected": true,
-      "truePositives": 0,
-      "falsePositives": 0,
-      "falseNegatives": 0,
-      "precision": 1,
-      "recall": 1,
-      "falsePositiveRate": 0,
-      "vulnerableFindings": [],
-      "cleanFindings": [],
-      "matchedFindings": [],
-      "unmatchedFindings": [],
-      "rawFindingsCount": 0,
-      "actualFindings": 0,
-      "expectedFindings": 0,
-      "negativeFindings": 0,
-      "latencyMs": 2007,
-      "vulnerableLatencyMs": 1063,
-      "cleanLatencyMs": 912,
-      "promptTokens": 0,
-      "completionTokens": 0,
-      "totalTokens": 0,
-      "requestCount": 0,
-      "apiFailures": 0,
-      "timeoutCount": 0,
-      "byReviewer": {},
-      "reviewerSpecificFindings": {},
-      "criticRetainedCount": 0,
-      "vulnerableDiffLines": 6,
-      "cleanDiffLines": 6,
       "passed": true
     }
   ]

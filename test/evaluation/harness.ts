@@ -19,7 +19,12 @@ import type {
   ReviewModel,
 } from '../../src/model/types.js';
 import { createTestFinding, MockReviewModel } from '../../src/review/__tests__/mocks.js';
-import type { RankedFinding, ReviewResult, ReviewSeverity } from '../../src/review/types.js';
+import type {
+  FindingDisposition,
+  RankedFinding,
+  ReviewResult,
+  ReviewSeverity,
+} from '../../src/review/types.js';
 import type {
   EvaluationMode,
   EvaluationResult,
@@ -163,19 +168,32 @@ export function calculateScorecard(
   let truePositives = 0;
   let falsePositives = 0;
   let falseNegatives = 0;
+  let blockingFalsePositives = 0;
   let totalPromptTokens = 0;
   let totalCompletionTokens = 0;
   let totalTokens = 0;
   let apiFailures = 0;
+  const dispositionBreakdown: Record<FindingDisposition, number> = {
+    blocking: 0,
+    advisory: 0,
+    informational: 0,
+    rejected: 0,
+  };
 
   for (const res of results) {
     truePositives += res.truePositives;
     falsePositives += res.falsePositives;
     falseNegatives += res.falseNegatives;
+    blockingFalsePositives += res.blockingFalsePositives ?? 0;
     totalPromptTokens += res.promptTokens;
     totalCompletionTokens += res.completionTokens;
     totalTokens += res.totalTokens;
     apiFailures += res.apiFailures;
+    if (res.dispositionBreakdown) {
+      for (const disp of ['blocking', 'advisory', 'informational', 'rejected'] as const) {
+        dispositionBreakdown[disp] += res.dispositionBreakdown[disp] ?? 0;
+      }
+    }
   }
 
   const latencies = results.map((r) => r.latencyMs).sort((a, b) => a - b);
@@ -187,6 +205,8 @@ export function calculateScorecard(
   const totalEvaluated = truePositives + falsePositives;
   const precision = totalEvaluated > 0 ? truePositives / totalEvaluated : 1.0;
   const falsePositiveRate = totalEvaluated > 0 ? falsePositives / totalEvaluated : 0.0;
+  const blockingFalsePositiveRate =
+    totalEvaluated > 0 ? blockingFalsePositives / totalEvaluated : 0.0;
   const recallDenominator = truePositives + falseNegatives;
   const recall = recallDenominator > 0 ? truePositives / recallDenominator : 1.0;
 
@@ -216,6 +236,9 @@ export function calculateScorecard(
     precision,
     recall,
     falsePositiveRate,
+    blockingFalsePositives,
+    blockingFalsePositiveRate,
+    dispositionBreakdown,
     totalPromptTokens,
     totalCompletionTokens,
     totalTokens,
@@ -415,7 +438,11 @@ export async function runEvaluationHarness(
   const startTime = Date.now();
   let fixtures = await loadGoldenFixtures(options?.fixturesDir);
   if (options?.fixtureFilter) {
-    fixtures = fixtures.filter((f) => f.name.includes(options.fixtureFilter!));
+    const filters = options.fixtureFilter
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    fixtures = fixtures.filter((f) => filters.some((filter) => f.name.includes(filter)));
   }
 
   const results: EvaluationResult[] = [];
@@ -678,6 +705,37 @@ export async function runEvaluationHarness(
     const criticRetainedCount =
       vulnResult.metadata?.postCriticFindingCount ?? vulnResult.findings.length;
 
+    const fixtureDispositionBreakdown: Record<FindingDisposition, number> = {
+      blocking: 0,
+      advisory: 0,
+      informational: 0,
+      rejected: 0,
+    };
+
+    const allFindings = [...vulnResult.findings, ...cleanResult.findings];
+    for (const f of allFindings) {
+      const disp = f.finalDisposition ?? 'advisory';
+      fixtureDispositionBreakdown[disp] = (fixtureDispositionBreakdown[disp] ?? 0) + 1;
+    }
+
+    const allRejected = [
+      ...(vulnResult.metadata?.rejectedFindings ?? []),
+      ...(cleanResult.metadata?.rejectedFindings ?? []),
+    ];
+    fixtureDispositionBreakdown.rejected += allRejected.length;
+
+    const cleanBlockingFPs = cleanResult.findings.filter(
+      (f) => f.finalDisposition === 'blocking'
+    ).length;
+    const unmatchedBlockingFPs = unmatchedFindings.filter(
+      (f) => f.finalDisposition === 'blocking'
+    ).length;
+    const blockingFalsePositives = cleanBlockingFPs + unmatchedBlockingFPs;
+    const blockingFalsePositiveRate =
+      truePositives + falsePositives > 0
+        ? blockingFalsePositives / (truePositives + falsePositives)
+        : 0.0;
+
     results.push({
       fixtureName: fixture.name,
       category: fixture.category,
@@ -693,6 +751,9 @@ export async function runEvaluationHarness(
       precision,
       recall,
       falsePositiveRate,
+      blockingFalsePositives,
+      blockingFalsePositiveRate,
+      dispositionBreakdown: fixtureDispositionBreakdown,
       vulnerableFindings: vulnResult.findings,
       cleanFindings: cleanResult.findings,
       matchedFindings,
