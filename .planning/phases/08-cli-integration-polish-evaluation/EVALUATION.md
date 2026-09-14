@@ -1,11 +1,11 @@
 # Octate Evaluation & Benchmark Report
 
-**Benchmark Date:** 2026-09-13  
+**Benchmark Date:** 2026-09-14  
 **Evaluation Mode:** **LIVE PIPELINE EVALUATION**  
 **Provider:** `nvidia`  
 **Model:** `nvidia/nemotron-3-ultra-550b-a55b`  
 **Endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`  
-**Total Model Requests:** `20`  
+**Total Model Requests:** `54`  
 **Overall Status:** ❌ FAILED  
 
 > **Methodological Note:** This evaluation was executed using live inference against NVIDIA's API on isolated Git repositories with realistic diff scopes. Results reflect genuine empirical review quality.
@@ -19,21 +19,21 @@
 | **Evaluation Mode** | — | **LIVE PIPELINE EVALUATION (nvidia: nvidia/nemotron-3-ultra-550b-a55b)** | — |
 | **Provider** | NVIDIA | **nvidia** | ✅ |
 | **Model** | Nemotron 3 Ultra | **nvidia/nemotron-3-ultra-550b-a55b** | ✅ |
-| **Total Requests** | — | **20** | — |
-| **True Positives** | > 0 | **2** | ✅ |
-| **False Positives** | 0 | **0** | ✅ |
-| **False Negatives** | 0 | **0** | ✅ |
-| **Precision** | >= 70.0% | **100.0%**  | ✅ PASSED |
-| **Recall** | >= 70.0% | **100.0%**  | ✅ PASSED |
-| **False-Positive Rate** | <= 30.0% | **0.0%**  | ✅ PASSED |
-| **Blocking False Positives** | 0 | **0** | ✅ |
-| **Blocking False-Positive Rate** | 0.0% | **0.0%** | ✅ PASSED |
-| **Gate Dispositions** | — | **Blocking: 0, Advisory: 2, Info: 0, Rejected: 0** | ✅ |
-| **p50 Latency** | < 30,000 ms | **366226 ms** | ❌ FAILED |
-| **p95 Latency** | < 30,000 ms | **458257 ms** | ❌ FAILED |
-| **Total Tokens Consumed** | < 64,000 tokens | **55863 tokens** | ✅ |
-| **API Failures** | 0 | **4** | ❌ |
-| **Timeouts** | 0 | **3** | ❌ |
+| **Total Requests** | — | **54** | — |
+| **True Positives** | > 0 | **1** | ✅ |
+| **False Positives** | 0 | **5** | ❌ |
+| **False Negatives** | 0 | **3** | ❌ |
+| **Precision** | >= 70.0% | **16.7%**  | ❌ FAILED |
+| **Recall** | >= 70.0% | **25.0%**  | ❌ FAILED |
+| **False-Positive Rate** | <= 30.0% | **83.3%**  | ❌ FAILED |
+| **Blocking False Positives** | 0 | **1** | ❌ |
+| **Blocking False-Positive Rate** | 0.0% | **16.7%** | ❌ FAILED |
+| **Gate Dispositions** | — | **Blocking: 1, Advisory: 5, Info: 0, Rejected: 0** | ✅ |
+| **p50 Latency** | < 30,000 ms | **726502 ms** | ❌ FAILED |
+| **p95 Latency** | < 30,000 ms | **1532730 ms** | ❌ FAILED |
+| **Total Tokens Consumed** | < 64,000 tokens | **70044 tokens** | ⚠️ High |
+| **API Failures** | 0 | **44** | ❌ |
+| **Timeouts** | 0 | **32** | ❌ |
 
 ---
 
@@ -41,9 +41,17 @@
 
 | Fixture | Language | Category | Detected (TP) | False Positives | Reviewer Counts | Critic Retained | Latency | Tokens | Diff Lines (V / C) | Passed |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `security/command-injection` | python | security | ✅ Yes (1) | 0 (Clean) | security:1 | 1 | 366226ms | 16738 | +12 / +14 | ❌ |
-| `security/sql-clean-type-assertion` | typescript | security | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 458257ms | 16487 | +8 / +8 | ✅ |
-| `security/sql-injection` | typescript | security | ✅ Yes (1) | 0 (Clean) | security:1 | 1 | 258565ms | 22638 | +8 / +8 | ✅ |
+| `security/command-injection` | python | security | ✅ Yes (1) | ❌ 1 | security:1 | 1 | 1162323ms | 26050 | +12 / +14 | ❌ |
+| `security/safe-subprocess-run` | python | security | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 720235ms | 0 | +2 / +2 | ❌ |
+| `security/sql-clean-type-assertion` | typescript | security | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 898463ms | 0 | +8 / +8 | ❌ |
+| `security/sql-injection` | typescript | security | ❌ No (FN: 1) | 0 (Clean) | fast-path | 0 | 726502ms | 0 | +8 / +8 | ❌ |
+| `structural/resource-leak` | typescript | structural | ❌ No (FN: 1) | 0 (Clean) | fast-path | 0 | 902505ms | 0 | +9 / +15 | ❌ |
+| `semantic/bounded-loop` | typescript | semantic | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 722329ms | 0 | +4 / +4 | ❌ |
+| `semantic/intentional-exception` | typescript | semantic | ✅ Yes (0) | ❌ 1 | fast-path | 0 | 1532730ms | 7466 | +4 / +4 | ❌ |
+| `semantic/logic-regression` | typescript | semantic | ❌ No (FN: 1) | ❌ 2 | structural:1 | 1 | 960256ms | 24697 | +13 / +13 | ❌ |
+| `refactor/unrelated-refactor` | typescript | refactor | ✅ Yes (0) | ❌ 1 | semantic:1 | 1 | 724964ms | 11831 | +7 / +7 | ❌ |
+| `docs/documentation-only` | markdown | docs | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 37ms | 0 | +5 / +5 | ✅ |
+| `test/test-only` | typescript | test | ✅ Yes (0) | 0 (Clean) | fast-path | 0 | 2086ms | 0 | +6 / +6 | ✅ |
 
 ---
 

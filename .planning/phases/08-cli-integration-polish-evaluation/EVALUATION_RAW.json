@@ -1,34 +1,34 @@
 {
-  "date": "2026-09-13",
+  "date": "2026-09-14",
   "mode": "live_pipeline",
   "modeLabel": "LIVE PIPELINE EVALUATION (nvidia: nvidia/nemotron-3-ultra-550b-a55b)",
   "provider": "nvidia",
   "model": "nvidia/nemotron-3-ultra-550b-a55b",
   "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
-  "totalRequests": 20,
+  "totalRequests": 54,
   "summary": {
-    "truePositives": 2,
-    "falsePositives": 0,
-    "falseNegatives": 0,
-    "precision": 1,
-    "recall": 1,
-    "falsePositiveRate": 0,
-    "blockingFalsePositives": 0,
-    "blockingFalsePositiveRate": 0,
+    "truePositives": 1,
+    "falsePositives": 5,
+    "falseNegatives": 3,
+    "precision": 0.16666666666666666,
+    "recall": 0.25,
+    "falsePositiveRate": 0.8333333333333334,
+    "blockingFalsePositives": 1,
+    "blockingFalsePositiveRate": 0.16666666666666666,
     "dispositionBreakdown": {
-      "blocking": 0,
-      "advisory": 2,
+      "blocking": 1,
+      "advisory": 5,
       "informational": 0,
       "rejected": 0
     },
-    "latencyMs": 1083060,
-    "p50LatencyMs": 366226,
-    "p95LatencyMs": 458257,
-    "totalTokens": 55863,
-    "totalPromptTokens": 40024,
-    "totalCompletionTokens": 15839,
-    "apiFailures": 4,
-    "timeoutCount": 3,
+    "latencyMs": 8352452,
+    "p50LatencyMs": 726502,
+    "p95LatencyMs": 1532730,
+    "totalTokens": 70044,
+    "totalPromptTokens": 47251,
+    "totalCompletionTokens": 22793,
+    "apiFailures": 44,
+    "timeoutCount": 32,
     "passed": false
   },
   "fixtures": [
@@ -42,16 +42,16 @@
       "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
       "detectedExpected": true,
       "truePositives": 1,
-      "falsePositives": 0,
+      "falsePositives": 1,
       "falseNegatives": 0,
-      "precision": 1,
+      "precision": 0.5,
       "recall": 1,
-      "falsePositiveRate": 0,
+      "falsePositiveRate": 0.5,
       "blockingFalsePositives": 0,
       "blockingFalsePositiveRate": 0,
       "dispositionBreakdown": {
         "blocking": 0,
-        "advisory": 1,
+        "advisory": 2,
         "informational": 0,
         "rejected": 0
       },
@@ -59,8 +59,8 @@
         {
           "severity": "critical",
           "category": "security",
-          "title": "Command injection vulnerability in view_audit_log",
-          "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
+          "title": "Command Injection via Unvalidated User Input in os.system()",
+          "message": "The view_audit_log() function directly interpolates user-controlled input (sys.argv[1]) into a shell command executed via os.system(). This allows an attacker to execute arbitrary commands by injecting shell metacharacters (e.g., ';', '&&', '|', '`', '$()'). For example, passing 'auth.log; cat /etc/passwd' would execute both cat commands. The fix is to avoid shell execution entirely by using Python's built-in file reading (open()) or subprocess.run() with shell=False and argument list.",
           "file": "scripts/reporter.py",
           "startLine": 12,
           "endLine": 14,
@@ -71,7 +71,7 @@
               "startLine": 12,
               "endLine": 14,
               "relationship": "direct",
-              "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+              "explanation": "The view_audit_log function takes user_file parameter and passes it directly into os.system with f-string interpolation, enabling shell command injection.",
               "tier": "direct_changed",
               "causalLink": ""
             },
@@ -80,7 +80,7 @@
               "startLine": 16,
               "endLine": 18,
               "relationship": "entry_point",
-              "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+              "explanation": "The main block accepts command-line arguments and passes them directly to view_audit_log, providing an attack vector.",
               "tier": "direct_changed",
               "causalLink": ""
             }
@@ -88,15 +88,14 @@
           "relatedFiles": [],
           "relatedSymbols": [
             "view_audit_log",
-            "get_log_directory",
             "os.system"
           ],
-          "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
-          "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+          "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, establish persistence, or pivot to other systems.",
+          "suggestedFix": "Replace os.system() with safe file reading:\n\ndef view_audit_log(user_file: str) -> None:\n    import os\n    log_dir = '/var/log'\n    # Validate filename contains no path traversal\n    if '..' in user_file or '/' in user_file or '\\\\' in user_file:\n        raise ValueError('Invalid filename')\n    filepath = os.path.join(log_dir, user_file)\n    # Ensure path stays within log directory\n    if not os.path.abspath(filepath).startswith(os.path.abspath(log_dir)):\n        raise ValueError('Path traversal attempt')\n    with open(filepath, 'r') as f:\n        print(f.read())",
           "reviewer": "security",
-          "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
-          "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
-          "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+          "claim": "The view_audit_log function in scripts/reporter.py passes unsanitized user input from sys.argv[1] directly into os.system() via an f-string, allowing arbitrary command execution.",
+          "failureMechanism": "When the script is invoked with a malicious argument (e.g., 'python reporter.py \"auth.log; rm -rf /\"'), the f-string constructs 'cat /var/log/auth.log; rm -rf /' which the shell executes as two separate commands. The semicolon terminates the cat command and starts a new one.",
+          "trigger": "Running the script with a command-line argument containing shell metacharacters (e.g., ';', '&&', '|', '`', '$()', newlines).",
           "requiredFix": "",
           "modelSuggestedDisposition": "blocking",
           "introducedByPatch": "unknown",
@@ -111,7 +110,7 @@
               "security"
             ]
           },
-          "id": "51bd037590fd4697",
+          "id": "bd3dabba35f1ff81",
           "finalDisposition": "advisory",
           "provenance": [],
           "compositeScore": 75.75,
@@ -128,13 +127,101 @@
           "line": 12
         }
       ],
-      "cleanFindings": [],
+      "cleanFindings": [
+        {
+          "severity": "high",
+          "category": "reliability",
+          "title": "Unhandled subprocess.CalledProcessError crashes CLI on missing log file",
+          "message": "The view_audit_log function uses subprocess.run with check=True but does not handle CalledProcessError. When the requested log file does not exist or cat fails (e.g., permission denied), the exception propagates uncaught, causing the CLI to exit with an ugly Python traceback instead of a clean error message.",
+          "file": "scripts/reporter.py",
+          "startLine": 13,
+          "endLine": 16,
+          "confidence": 0.95,
+          "evidence": [
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 13,
+              "endLine": 16,
+              "relationship": "direct",
+              "explanation": "subprocess.run([\"cat\", str(safe_path)], check=True) raises CalledProcessError on non-zero exit codes with no try/except handling",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 18,
+              "endLine": 20,
+              "relationship": "caller",
+              "explanation": "Main block calls view_audit_log without any error handling wrapper",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 15,
+              "endLine": 16,
+              "relationship": "direct",
+              "explanation": "subprocess.run captures neither stdout nor stderr, so cat's error output goes directly to console",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "scripts/reporter.py",
+              "startLine": 1,
+              "endLine": 3,
+              "relationship": "context",
+              "explanation": "Imports subprocess and Path but uses subprocess for a simple file read operation",
+              "tier": "direct_changed",
+              "causalLink": ""
+            }
+          ],
+          "relatedFiles": [],
+          "relatedSymbols": [
+            "view_audit_log"
+          ],
+          "impact": "Users receive unhelpful Python tracebacks instead of clean error messages when requesting non-existent or unreadable log files. This degrades operational usability for administrative diagnostics.",
+          "suggestedFix": "Wrap subprocess.run in try/except CalledProcessError and print a user-friendly error message to stderr, then exit with non-zero code. Example:\n\ntry:\n    subprocess.run([\"cat\", str(safe_path)], check=True)\nexcept subprocess.CalledProcessError as e:\n    print(f\"Error reading log file: {e}\", file=sys.stderr)\n    sys.exit(1)",
+          "reviewer": "semantic",
+          "claim": "view_audit_log() allows subprocess.CalledProcessError to escape unhandled, causing unclean CLI termination on common error conditions (missing file, permission denied).",
+          "failureMechanism": "When user_file references a non-existent file in /var/log/, cat exits with code 1. check=True converts this to CalledProcessError which propagates through view_audit_log() and the main block, terminating the interpreter with a full traceback.",
+          "trigger": "Running the script with a filename that does not exist in /var/log/ (e.g., `python reporter.py nonexistent.log`) or a file the user lacks permission to read.",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
+          "contributingReviewers": [
+            "semantic"
+          ],
+          "metadata": {
+            "contributingReviewers": [
+              "semantic"
+            ]
+          },
+          "id": "e7ec3f4815ba67f1",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 65.25,
+          "scoreBreakdown": {
+            "severityScore": 75,
+            "confidenceScore": 95,
+            "evidenceStrengthScore": 95,
+            "blastRadiusScore": 10,
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 80
+          },
+          "blastRadius": 10,
+          "evidenceStrength": 95,
+          "line": 13
+        }
+      ],
       "matchedFindings": [
         {
           "severity": "critical",
           "category": "security",
-          "title": "Command injection vulnerability in view_audit_log",
-          "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
+          "title": "Command Injection via Unvalidated User Input in os.system()",
+          "message": "The view_audit_log() function directly interpolates user-controlled input (sys.argv[1]) into a shell command executed via os.system(). This allows an attacker to execute arbitrary commands by injecting shell metacharacters (e.g., ';', '&&', '|', '`', '$()'). For example, passing 'auth.log; cat /etc/passwd' would execute both cat commands. The fix is to avoid shell execution entirely by using Python's built-in file reading (open()) or subprocess.run() with shell=False and argument list.",
           "file": "scripts/reporter.py",
           "startLine": 12,
           "endLine": 14,
@@ -145,7 +232,7 @@
               "startLine": 12,
               "endLine": 14,
               "relationship": "direct",
-              "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+              "explanation": "The view_audit_log function takes user_file parameter and passes it directly into os.system with f-string interpolation, enabling shell command injection.",
               "tier": "direct_changed",
               "causalLink": ""
             },
@@ -154,7 +241,7 @@
               "startLine": 16,
               "endLine": 18,
               "relationship": "entry_point",
-              "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+              "explanation": "The main block accepts command-line arguments and passes them directly to view_audit_log, providing an attack vector.",
               "tier": "direct_changed",
               "causalLink": ""
             }
@@ -162,15 +249,14 @@
           "relatedFiles": [],
           "relatedSymbols": [
             "view_audit_log",
-            "get_log_directory",
             "os.system"
           ],
-          "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
-          "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+          "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, establish persistence, or pivot to other systems.",
+          "suggestedFix": "Replace os.system() with safe file reading:\n\ndef view_audit_log(user_file: str) -> None:\n    import os\n    log_dir = '/var/log'\n    # Validate filename contains no path traversal\n    if '..' in user_file or '/' in user_file or '\\\\' in user_file:\n        raise ValueError('Invalid filename')\n    filepath = os.path.join(log_dir, user_file)\n    # Ensure path stays within log directory\n    if not os.path.abspath(filepath).startswith(os.path.abspath(log_dir)):\n        raise ValueError('Path traversal attempt')\n    with open(filepath, 'r') as f:\n        print(f.read())",
           "reviewer": "security",
-          "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
-          "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
-          "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+          "claim": "The view_audit_log function in scripts/reporter.py passes unsanitized user input from sys.argv[1] directly into os.system() via an f-string, allowing arbitrary command execution.",
+          "failureMechanism": "When the script is invoked with a malicious argument (e.g., 'python reporter.py \"auth.log; rm -rf /\"'), the f-string constructs 'cat /var/log/auth.log; rm -rf /' which the shell executes as two separate commands. The semicolon terminates the cat command and starts a new one.",
+          "trigger": "Running the script with a command-line argument containing shell metacharacters (e.g., ';', '&&', '|', '`', '$()', newlines).",
           "requiredFix": "",
           "modelSuggestedDisposition": "blocking",
           "introducedByPatch": "unknown",
@@ -185,7 +271,7 @@
               "security"
             ]
           },
-          "id": "51bd037590fd4697",
+          "id": "bd3dabba35f1ff81",
           "finalDisposition": "advisory",
           "provenance": [],
           "compositeScore": 75.75,
@@ -206,16 +292,16 @@
       "rawFindingsCount": 1,
       "actualFindings": 1,
       "expectedFindings": 1,
-      "negativeFindings": 0,
-      "latencyMs": 366226,
-      "vulnerableLatencyMs": 126044,
-      "cleanLatencyMs": 240090,
-      "promptTokens": 11689,
-      "completionTokens": 5049,
-      "totalTokens": 16738,
-      "requestCount": 7,
-      "apiFailures": 4,
-      "timeoutCount": 3,
+      "negativeFindings": 1,
+      "latencyMs": 1162323,
+      "vulnerableLatencyMs": 254344,
+      "cleanLatencyMs": 907893,
+      "promptTokens": 16983,
+      "completionTokens": 9067,
+      "totalTokens": 26050,
+      "requestCount": 9,
+      "apiFailures": 2,
+      "timeoutCount": 2,
       "byReviewer": {
         "security": 1
       },
@@ -227,7 +313,7 @@
             "title": "Command injection vulnerability in view_audit_log",
             "message": "The function view_audit_log directly interpolates user-controlled input into a shell command via os.system without validation or sanitization. An attacker can execute arbitrary commands by passing shell metacharacters (e.g., '; rm -rf /', '&& cat /etc/passwd').",
             "file": "scripts/reporter.py",
-            "startLine": 12,
+            "startLine": 14,
             "endLine": 14,
             "confidence": 1,
             "evidence": [
@@ -236,7 +322,7 @@
                 "startLine": 12,
                 "endLine": 14,
                 "relationship": "direct",
-                "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+                "explanation": "The view_audit_log function takes user_file parameter and passes it directly into os.system with f-string interpolation, enabling shell command injection.",
                 "tier": "direct_changed",
                 "causalLink": ""
               },
@@ -245,21 +331,22 @@
                 "startLine": 16,
                 "endLine": 18,
                 "relationship": "entry_point",
-                "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+                "explanation": "The main block accepts command-line arguments and passes them directly to view_audit_log, providing an attack vector.",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
             ],
             "relatedFiles": [],
             "relatedSymbols": [
-              "view_audit_log"
+              "view_audit_log",
+              "os.system"
             ],
-            "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, or establish persistence.",
-            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric only). Example: subprocess.run(['cat', os.path.join('/var/log', user_file)], check=True) after validating user_file matches ^[a-zA-Z0-9_.-]+$.",
+            "impact": "Full remote code execution as the user running the script. Attackers can read arbitrary files, modify system state, or establish persistence.",
+            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + underscore + hyphen + dot). Example: subprocess.run(['cat', os.path.join('/var/log', user_file)], check=True) after validating user_file matches ^[a-zA-Z0-9_.-]+$.",
             "reviewer": "structural",
-            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
-            "failureMechanism": "When user_file contains shell metacharacters (e.g., 'log.txt; cat /etc/passwd'), the shell interprets them as command separators, executing the injected command with the script's privileges.",
-            "trigger": "Passing a filename argument containing shell metacharacters (e.g., ';', '&&', '|', '$()', '`') to the script via command line.",
+            "claim": "The view_audit_log function executes unvalidated user input as a shell command via os.system, allowing arbitrary command execution.",
+            "failureMechanism": "When user_file contains shell metacharacters (e.g., 'access.log; cat /etc/passwd'), the f-string produces 'cat /var/log/access.log; cat /etc/passwd' which the shell executes as two separate commands.",
+            "trigger": "Passing a filename argument containing shell metacharacters (semicolon, ampersand, pipe, backticks, $(), etc.) to the script.",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
@@ -273,9 +360,9 @@
             "severity": "critical",
             "category": "security",
             "title": "Command injection vulnerability in view_audit_log",
-            "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
+            "message": "The view_audit_log function directly interpolates user-controlled input into a shell command via os.system() without validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'.",
             "file": "scripts/reporter.py",
-            "startLine": 12,
+            "startLine": 14,
             "endLine": 14,
             "confidence": 1,
             "evidence": [
@@ -284,7 +371,7 @@
                 "startLine": 12,
                 "endLine": 14,
                 "relationship": "direct",
-                "explanation": "Line 14 shows os.system(f\"cat /var/log/{user_file}\") where user_file is directly interpolated into the shell command without validation",
+                "explanation": "The function view_audit_log takes user_file parameter and directly interpolates it into os.system() call without any sanitization",
                 "tier": "direct_changed",
                 "causalLink": ""
               },
@@ -292,8 +379,8 @@
                 "file": "scripts/reporter.py",
                 "startLine": 16,
                 "endLine": 18,
-                "relationship": "caller",
-                "explanation": "Main block passes sys.argv[1] directly to view_audit_log, making it reachable from command line",
+                "relationship": "entry_point",
+                "explanation": "Main block accepts command line argument and passes it directly to view_audit_log, providing attack vector",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
@@ -301,14 +388,14 @@
             "relatedFiles": [],
             "relatedSymbols": [
               "view_audit_log",
-              "get_log_directory"
+              "os.system"
             ],
-            "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
-            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+            "impact": "Full remote code execution as the user running the script. Attacker can execute arbitrary commands, read sensitive files, modify system state, or establish persistence.",
+            "suggestedFix": "Replace os.system() with subprocess.run() using shell=False and explicit arguments, or use Python's built-in file reading (open()/read()). Validate user_file against a whitelist of allowed log filenames or use os.path.basename() to prevent path traversal.",
             "reviewer": "semantic",
-            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
+            "claim": "The view_audit_log function executes unvalidated user input as a shell command, allowing arbitrary command execution.",
             "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
-            "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+            "trigger": "Passing a malicious filename as command-line argument, e.g., 'python reporter.py \"; cat /etc/passwd\"' or 'python reporter.py \"logfile; rm -rf /\"'",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
@@ -323,8 +410,8 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "Command Injection via Unsanitized User Input in os.system()",
-            "message": "The view_audit_log() function directly interpolates unvalidated user input (from sys.argv[1]) into a shell command executed via os.system(). This allows arbitrary command execution by passing shell metacharacters (e.g., ';', '&&', '|', '$()') in the filename argument.",
+            "title": "Command Injection via Unvalidated User Input in os.system()",
+            "message": "The view_audit_log() function directly interpolates user-controlled input (sys.argv[1]) into a shell command executed via os.system(). This allows an attacker to execute arbitrary commands by injecting shell metacharacters (e.g., ';', '&&', '|', '`', '$()'). For example, passing 'auth.log; cat /etc/passwd' would execute both cat commands. The fix is to avoid shell execution entirely by using Python's built-in file reading (open()) or subprocess.run() with shell=False and argument list.",
             "file": "scripts/reporter.py",
             "startLine": 12,
             "endLine": 14,
@@ -335,7 +422,7 @@
                 "startLine": 12,
                 "endLine": 14,
                 "relationship": "vulnerable_sink",
-                "explanation": "os.system() executes the interpolated string in a shell. The f-string f\"cat /var/log/{user_file}\" directly embeds user-controlled input without validation or escaping.",
+                "explanation": "os.system() executes a shell command with user input directly interpolated via f-string, enabling command injection.",
                 "tier": "direct_changed",
                 "causalLink": ""
               },
@@ -344,7 +431,7 @@
                 "startLine": 16,
                 "endLine": 18,
                 "relationship": "taint_source",
-                "explanation": "User input enters via sys.argv[1] at line 18 and flows directly into view_audit_log() at line 18, then into the os.system() call at line 14.",
+                "explanation": "sys.argv[1] provides unvalidated user input that flows directly into view_audit_log() without sanitization.",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
@@ -354,12 +441,12 @@
               "view_audit_log",
               "os.system"
             ],
-            "impact": "An attacker with CLI access can execute arbitrary commands with the privileges of the script (potentially root if run via sudo). Example exploit: `python reporter.py 'auth.log; cat /etc/shadow'` or `python reporter.py 'auth.log && rm -rf /'`.",
-            "suggestedFix": "Replace os.system() with subprocess.run() using a list argument (no shell=True) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Example:\n\nimport subprocess\nimport re\n\ndef view_audit_log(user_file: str) -> None:\n    if not re.match(r'^[a-zA-Z0-9._-]+$', user_file):\n        raise ValueError(\"Invalid filename\")\n    log_path = f\"/var/log/{user_file}\"\n    subprocess.run([\"cat\", log_path], check=True)",
+            "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, establish persistence, or pivot to other systems.",
+            "suggestedFix": "Replace os.system() with safe file reading:\n\ndef view_audit_log(user_file: str) -> None:\n    import os\n    log_dir = '/var/log'\n    # Validate filename contains no path traversal\n    if '..' in user_file or '/' in user_file or '\\\\' in user_file:\n        raise ValueError('Invalid filename')\n    filepath = os.path.join(log_dir, user_file)\n    # Ensure path stays within log directory\n    if not os.path.abspath(filepath).startswith(os.path.abspath(log_dir)):\n        raise ValueError('Path traversal attempt')\n    with open(filepath, 'r') as f:\n        print(f.read())",
             "reviewer": "security",
-            "claim": "The view_audit_log function at line 12-14 passes unsanitized user input from sys.argv[1] directly into os.system(), enabling shell command injection.",
-            "failureMechanism": "When the script is invoked with a malicious argument containing shell metacharacters (e.g., 'auth.log; id'), the f-string interpolates the entire string into the shell command. The shell then parses and executes each command separated by metacharacters, running attacker-controlled code.",
-            "trigger": "Running the script with a command-line argument containing shell metacharacters: `python scripts/reporter.py 'auth.log; malicious_command'`",
+            "claim": "The view_audit_log function in scripts/reporter.py passes unsanitized user input from sys.argv[1] directly into os.system() via an f-string, allowing arbitrary command execution.",
+            "failureMechanism": "When the script is invoked with a malicious argument (e.g., 'python reporter.py \"auth.log; rm -rf /\"'), the f-string constructs 'cat /var/log/auth.log; rm -rf /' which the shell executes as two separate commands. The semicolon terminates the cat command and starts a new one.",
+            "trigger": "Running the script with a command-line argument containing shell metacharacters (e.g., ';', '&&', '|', '`', '$()', newlines).",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
@@ -374,8 +461,8 @@
           {
             "severity": "critical",
             "category": "security",
-            "title": "Command injection vulnerability in view_audit_log",
-            "message": "The view_audit_log function directly interpolates user-controlled input (user_file) into a shell command via os.system without any validation or sanitization. An attacker can inject arbitrary shell commands by providing input like '; rm -rf /' or '; cat /etc/passwd'. This allows full command execution with the privileges of the running process.",
+            "title": "Command Injection via Unvalidated User Input in os.system()",
+            "message": "The view_audit_log() function directly interpolates user-controlled input (sys.argv[1]) into a shell command executed via os.system(). This allows an attacker to execute arbitrary commands by injecting shell metacharacters (e.g., ';', '&&', '|', '`', '$()'). For example, passing 'auth.log; cat /etc/passwd' would execute both cat commands. The fix is to avoid shell execution entirely by using Python's built-in file reading (open()) or subprocess.run() with shell=False and argument list.",
             "file": "scripts/reporter.py",
             "startLine": 12,
             "endLine": 14,
@@ -386,7 +473,7 @@
                 "startLine": 12,
                 "endLine": 14,
                 "relationship": "direct",
-                "explanation": "Line 14 uses os.system with an f-string that directly embeds user_file into the shell command without any escaping or validation.",
+                "explanation": "The view_audit_log function takes user_file parameter and passes it directly into os.system with f-string interpolation, enabling shell command injection.",
                 "tier": "direct_changed",
                 "causalLink": ""
               },
@@ -395,7 +482,7 @@
                 "startLine": 16,
                 "endLine": 18,
                 "relationship": "entry_point",
-                "explanation": "The main block passes sys.argv[1] directly to view_audit_log, making the vulnerability reachable from the command line.",
+                "explanation": "The main block accepts command-line arguments and passes them directly to view_audit_log, providing an attack vector.",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
@@ -403,15 +490,14 @@
             "relatedFiles": [],
             "relatedSymbols": [
               "view_audit_log",
-              "get_log_directory",
               "os.system"
             ],
-            "impact": "Arbitrary command execution as the user running the script. An attacker can read any file, modify system state, establish persistence, or pivot to other systems.",
-            "suggestedFix": "Replace os.system with subprocess.run using a list argument (shell=False) and validate the filename against a strict allowlist pattern (e.g., alphanumeric + dots/hyphens only). Better yet, use Python's built-in file reading: open(os.path.join('/var/log', user_file), 'r').read() after validating the path stays within /var/log using os.path.realpath.",
+            "impact": "Full remote code execution as the user running the script. An attacker can read arbitrary files, modify system state, establish persistence, or pivot to other systems.",
+            "suggestedFix": "Replace os.system() with safe file reading:\n\ndef view_audit_log(user_file: str) -> None:\n    import os\n    log_dir = '/var/log'\n    # Validate filename contains no path traversal\n    if '..' in user_file or '/' in user_file or '\\\\' in user_file:\n        raise ValueError('Invalid filename')\n    filepath = os.path.join(log_dir, user_file)\n    # Ensure path stays within log directory\n    if not os.path.abspath(filepath).startswith(os.path.abspath(log_dir)):\n        raise ValueError('Path traversal attempt')\n    with open(filepath, 'r') as f:\n        print(f.read())",
             "reviewer": "security",
-            "claim": "The view_audit_log function executes unvalidated user input as a shell command, enabling command injection.",
-            "failureMechanism": "When user_file contains shell metacharacters (e.g., ';', '&&', '|', '`', '$()'), the shell interprets them as command separators or operators, executing attacker-controlled code.",
-            "trigger": "Passing a filename argument containing shell metacharacters to the script, e.g., `python reporter.py 'access.log; cat /etc/passwd'`",
+            "claim": "The view_audit_log function in scripts/reporter.py passes unsanitized user input from sys.argv[1] directly into os.system() via an f-string, allowing arbitrary command execution.",
+            "failureMechanism": "When the script is invoked with a malicious argument (e.g., 'python reporter.py \"auth.log; rm -rf /\"'), the f-string constructs 'cat /var/log/auth.log; rm -rf /' which the shell executes as two separate commands. The semicolon terminates the cat command and starts a new one.",
+            "trigger": "Running the script with a command-line argument containing shell metacharacters (e.g., ';', '&&', '|', '`', '$()', newlines).",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
@@ -426,6 +512,53 @@
       "criticRetainedCount": 1,
       "vulnerableDiffLines": 12,
       "cleanDiffLines": 14,
+      "passed": false
+    },
+    {
+      "fixtureName": "security/safe-subprocess-run",
+      "category": "security",
+      "language": "python",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": true,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "precision": 1,
+      "recall": 1,
+      "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 0,
+      "negativeFindings": 0,
+      "latencyMs": 720235,
+      "vulnerableLatencyMs": 360098,
+      "cleanLatencyMs": 360091,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 6,
+      "apiFailures": 8,
+      "timeoutCount": 6,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 2,
+      "cleanDiffLines": 2,
       "passed": false
     },
     {
@@ -459,76 +592,21 @@
       "actualFindings": 0,
       "expectedFindings": 0,
       "negativeFindings": 0,
-      "latencyMs": 458257,
-      "vulnerableLatencyMs": 297567,
-      "cleanLatencyMs": 160644,
-      "promptTokens": 12638,
-      "completionTokens": 3849,
-      "totalTokens": 16487,
+      "latencyMs": 898463,
+      "vulnerableLatencyMs": 535685,
+      "cleanLatencyMs": 362739,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
       "requestCount": 6,
-      "apiFailures": 0,
-      "timeoutCount": 0,
+      "apiFailures": 8,
+      "timeoutCount": 6,
       "byReviewer": {},
-      "reviewerSpecificFindings": {
-        "critic": [
-          {
-            "severity": "medium",
-            "category": "correctness",
-            "title": "Unsafe type assertion on database result without runtime validation",
-            "message": "The function uses `as UserRecord` type assertion on `result.rows[0]` without any runtime validation that the database row matches the UserRecord interface. If the database schema drifts (e.g., column renamed from 'id' to 'user_id', missing 'role' column, or extra columns), the returned object will not match the interface, causing downstream bugs that TypeScript cannot catch.",
-            "file": "src/db/users.ts",
-            "startLine": 19,
-            "endLine": 19,
-            "confidence": 0.85,
-            "evidence": [
-              {
-                "file": "src/db/users.ts",
-                "startLine": 3,
-                "endLine": 8,
-                "relationship": "defines expected shape",
-                "explanation": "UserRecord interface defines required fields: id, name, email, role",
-                "tier": "direct_changed",
-                "causalLink": ""
-              },
-              {
-                "file": "src/db/users.ts",
-                "startLine": 17,
-                "endLine": 19,
-                "relationship": "performs unsafe cast",
-                "explanation": "Query uses SELECT * and casts first row directly to UserRecord without validation",
-                "tier": "direct_changed",
-                "causalLink": ""
-              }
-            ],
-            "relatedFiles": [
-              "src/db/users.ts"
-            ],
-            "relatedSymbols": [
-              "getUserById",
-              "UserRecord"
-            ],
-            "impact": "Runtime type mismatches when database schema changes, leading to undefined property access errors in calling code that trusts the UserRecord type contract.",
-            "suggestedFix": "Add runtime validation or use a mapping function to transform the database row into a validated UserRecord. Example: `const row = result.rows[0]; if (!row) return null; return { id: row.id, name: row.name, email: row.email, role: row.role } as UserRecord;`",
-            "reviewer": "semantic",
-            "claim": "The getUserById function performs an unsafe type assertion on database results without runtime validation, creating a correctness risk if the database schema diverges from the UserRecord interface.",
-            "failureMechanism": "When the database schema changes (e.g., column rename, column removal, or type change), the SELECT * query returns rows that don't match UserRecord. The TypeScript assertion `as UserRecord` suppresses compile-time errors, but the returned object lacks expected properties or has wrong types, causing failures in downstream code that accesses properties like user.role or user.email.",
-            "trigger": "Database schema drift where the users table columns no longer match the UserRecord interface (id, name, email, role).",
-            "requiredFix": "",
-            "modelSuggestedDisposition": "advisory",
-            "introducedByPatch": "unknown",
-            "criticDecision": "uncertain",
-            "contradictions": [],
-            "id": "finding-critic-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ],
-        "security": []
-      },
+      "reviewerSpecificFindings": {},
       "criticRetainedCount": 0,
       "vulnerableDiffLines": 8,
       "cleanDiffLines": 8,
-      "passed": true
+      "passed": false
     },
     {
       "fixtureName": "security/sql-injection",
@@ -538,13 +616,704 @@
       "provider": "nvidia",
       "model": "nvidia/nemotron-3-ultra-550b-a55b",
       "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": false,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 1,
+      "precision": 1,
+      "recall": 0,
+      "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 1,
+      "negativeFindings": 0,
+      "latencyMs": 726502,
+      "vulnerableLatencyMs": 363422,
+      "cleanLatencyMs": 363029,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 6,
+      "apiFailures": 8,
+      "timeoutCount": 6,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 8,
+      "cleanDiffLines": 8,
+      "passed": false
+    },
+    {
+      "fixtureName": "structural/resource-leak",
+      "category": "structural",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": false,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 1,
+      "precision": 1,
+      "recall": 0,
+      "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 1,
+      "negativeFindings": 0,
+      "latencyMs": 902505,
+      "vulnerableLatencyMs": 361898,
+      "cleanLatencyMs": 540548,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 4,
+      "apiFailures": 6,
+      "timeoutCount": 4,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 9,
+      "cleanDiffLines": 15,
+      "passed": false
+    },
+    {
+      "fixtureName": "semantic/bounded-loop",
+      "category": "semantic",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
       "detectedExpected": true,
-      "truePositives": 1,
+      "truePositives": 0,
       "falsePositives": 0,
       "falseNegatives": 0,
       "precision": 1,
       "recall": 1,
       "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 0,
+      "negativeFindings": 0,
+      "latencyMs": 722329,
+      "vulnerableLatencyMs": 361204,
+      "cleanLatencyMs": 361081,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 4,
+      "apiFailures": 6,
+      "timeoutCount": 4,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 4,
+      "cleanDiffLines": 4,
+      "passed": false
+    },
+    {
+      "fixtureName": "semantic/intentional-exception",
+      "category": "semantic",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": true,
+      "truePositives": 0,
+      "falsePositives": 1,
+      "falseNegatives": 0,
+      "precision": 0,
+      "recall": 1,
+      "falsePositiveRate": 1,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 1,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [
+        {
+          "severity": "medium",
+          "category": "correctness",
+          "title": "Incorrect error type for missing user ID validation",
+          "message": "The findUser function throws NotFoundError when the user ID is missing or empty. NotFoundError semantically indicates a resource was looked up but not found (HTTP 404), whereas a missing/invalid ID parameter is a client input validation error (HTTP 400 Bad Request). This misleads callers and error handling logic into treating a validation failure as a 'user not found' scenario.",
+          "file": "src/errors/user.ts",
+          "startLine": 10,
+          "endLine": 12,
+          "confidence": 0.85,
+          "evidence": [
+            {
+              "file": "src/errors/user.ts",
+              "startLine": 10,
+              "endLine": 12,
+              "relationship": "direct",
+              "explanation": "The added validation throws NotFoundError for missing ID, but this is a validation error, not a 'resource not found' error.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            }
+          ],
+          "relatedFiles": [],
+          "relatedSymbols": [
+            "findUser",
+            "NotFoundError"
+          ],
+          "impact": "Callers catching NotFoundError to handle 'user not found' cases will incorrectly handle missing ID validation errors. Error logging/monitoring will misclassify validation errors as 404s. API consumers receive misleading error semantics.",
+          "suggestedFix": "Replace NotFoundError with a validation error type (e.g., ValidationError, BadRequestError, or ArgumentError) that correctly represents a missing/invalid input parameter. If no such type exists, create one or use a generic Error with a clear message.",
+          "reviewer": "semantic",
+          "claim": "The findUser function throws NotFoundError for missing ID input, but this is a validation error (bad request), not a 'resource not found' error.",
+          "failureMechanism": "When findUser is called with an empty string, null, or undefined id, it throws NotFoundError. Callers expecting NotFoundError only for actual missing users will misinterpret this as a user lookup failure rather than an input validation failure.",
+          "trigger": "Calling findUser('') or findUser(null) or findUser(undefined)",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
+          "contributingReviewers": [
+            "semantic"
+          ],
+          "metadata": {
+            "contributingReviewers": [
+              "semantic"
+            ]
+          },
+          "id": "764f0830cad1fa92",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 48.75,
+          "scoreBreakdown": {
+            "severityScore": 50,
+            "confidenceScore": 85,
+            "evidenceStrengthScore": 45,
+            "blastRadiusScore": 10,
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
+          },
+          "blastRadius": 10,
+          "evidenceStrength": 45,
+          "line": 10
+        }
+      ],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 0,
+      "negativeFindings": 1,
+      "latencyMs": 1532730,
+      "vulnerableLatencyMs": 719083,
+      "cleanLatencyMs": 813581,
+      "promptTokens": 5028,
+      "completionTokens": 2438,
+      "totalTokens": 7466,
+      "requestCount": 8,
+      "apiFailures": 4,
+      "timeoutCount": 3,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {
+        "critic": [
+          {
+            "severity": "medium",
+            "category": "architecture",
+            "title": "Inappropriate error type for input validation",
+            "message": "The findUser function throws NotFoundError when the input ID is empty/falsy. NotFoundError semantically indicates a resource was not found in storage (404), not that the caller provided invalid input (400). This violates API contract expectations: callers catching NotFoundError to handle 'user not in database' will incorrectly handle 'invalid ID provided' the same way. Use a ValidationError or BadRequestError for input validation failures.",
+            "file": "src/errors/user.ts",
+            "startLine": 11,
+            "endLine": 13,
+            "confidence": 0.85,
+            "evidence": [
+              {
+                "file": "src/errors/user.ts",
+                "startLine": 11,
+                "endLine": 13,
+                "relationship": "direct",
+                "explanation": "The added validation throws NotFoundError for empty ID input, which is a precondition violation, not a resource-not-found condition.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              }
+            ],
+            "relatedFiles": [],
+            "relatedSymbols": [
+              "findUser",
+              "NotFoundError"
+            ],
+            "impact": "Callers cannot distinguish between 'invalid ID provided' and 'user not found in database' when catching NotFoundError, leading to incorrect error handling and potential security information leakage (e.g., revealing whether a user ID format is valid).",
+            "suggestedFix": "Replace NotFoundError with a validation-specific error type (e.g., ValidationError, BadRequestError, or InvalidArgumentError) that clearly indicates input validation failure.",
+            "reviewer": "structural",
+            "claim": "findUser throws NotFoundError for empty input ID, conflating input validation errors with resource-not-found errors.",
+            "failureMechanism": "When a caller passes an empty string as id, the function throws NotFoundError. Callers that catch NotFoundError to handle missing users will treat invalid input identically to non-existent users, breaking error handling logic and potentially exposing whether an ID format is valid.",
+            "trigger": "Calling findUser('') or findUser with any falsy value",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
+            "id": "finding-critic-0",
+            "finalRank": 1,
+            "status": "open"
+          },
+          {
+            "severity": "medium",
+            "category": "correctness",
+            "title": "Incorrect error type for input validation",
+            "message": "The function throws NotFoundError when the user ID is missing or falsy, but NotFoundError semantically indicates a resource was not found in storage (e.g., database lookup failed). For missing/invalid input arguments, a ValidationError, BadRequestError, or ArgumentError would be more appropriate. This misleads error handling logic upstream that may catch NotFoundError to handle 'user not in database' cases differently from 'invalid request' cases.",
+            "file": "src/errors/user.ts",
+            "startLine": 10,
+            "endLine": 12,
+            "confidence": 0.85,
+            "evidence": [
+              {
+                "file": "src/errors/user.ts",
+                "startLine": 10,
+                "endLine": 12,
+                "relationship": "direct",
+                "explanation": "The added validation throws NotFoundError for missing/falsy id parameter, which is an input validation failure, not a resource lookup failure.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              }
+            ],
+            "relatedFiles": [],
+            "relatedSymbols": [
+              "findUser",
+              "NotFoundError"
+            ],
+            "impact": "Error handling code that distinguishes between 'invalid request' (400) and 'resource not found' (404) will misclassify this error, potentially returning incorrect HTTP status codes or misleading error messages to clients.",
+            "suggestedFix": "Replace NotFoundError with a validation-appropriate error type (e.g., ValidationError, BadRequestError, or ArgumentError). If such a type doesn't exist, consider creating one or using a generic Error with a clear message.",
+            "reviewer": "semantic",
+            "claim": "The findUser function throws NotFoundError for missing/invalid input arguments, which is semantically incorrect as NotFoundError should only be used when a resource lookup fails.",
+            "failureMechanism": "When a caller invokes findUser with an empty string, null, undefined, or other falsy value, the function throws NotFoundError. Upstream error handlers that catch NotFoundError to return HTTP 404 will incorrectly treat this validation error as a 'user not found in database' error.",
+            "trigger": "Calling findUser(\"\"), findUser(null), findUser(undefined), or findUser(0)",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
+            "id": "finding-critic-0",
+            "finalRank": 1,
+            "status": "open"
+          }
+        ]
+      },
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 4,
+      "cleanDiffLines": 4,
+      "passed": false
+    },
+    {
+      "fixtureName": "semantic/logic-regression",
+      "category": "semantic",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": false,
+      "truePositives": 0,
+      "falsePositives": 2,
+      "falseNegatives": 1,
+      "precision": 0,
+      "recall": 0,
+      "falsePositiveRate": 1,
+      "blockingFalsePositives": 1,
+      "blockingFalsePositiveRate": 0.5,
+      "dispositionBreakdown": {
+        "blocking": 1,
+        "advisory": 1,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [
+        {
+          "severity": "high",
+          "category": "correctness",
+          "title": "Incorrect tax calculation order - tax applied before discount",
+          "message": "The newly introduced calculateOrderTotal function computes tax on the full subtotal before applying the discount coupon. This results in customers paying tax on the pre-discount amount, which is incorrect for standard sales tax calculations. The discount should be applied before tax calculation (tax on discounted amount). The code comment explicitly acknowledges this as a 'Regression', confirming the author is aware of the incorrect behavior. This causes measurable financial overcharging on every discounted order and creates billing discrepancies with potential compliance implications.",
+          "file": "src/billing/pricing.ts",
+          "startLine": 22,
+          "endLine": 24,
+          "confidence": 0.98,
+          "evidence": [
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 22,
+              "endLine": 24,
+              "relationship": "direct_changed",
+              "explanation": "Lines 22-24 show the incorrect calculation: tax = subtotal * taxRate, then total = subtotal + tax - discountCouponAmount. This applies tax to the full subtotal before subtracting the discount. The comment on line 22 explicitly labels this as a 'Regression'.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            }
+          ],
+          "relatedFiles": [],
+          "relatedSymbols": [
+            "calculateOrderTotal",
+            "PricingOptions"
+          ],
+          "impact": "Customers are overcharged on tax when discount coupons are used. For a $100 order with 10% discount and 8% tax: current code charges $100*1.08 - $10 = $98, correct calculation should be ($100-$10)*1.08 = $97.20. This creates billing discrepancies, customer trust issues, and potential tax compliance violations.",
+          "suggestedFix": "Apply discount before tax calculation: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+          "reviewer": "structural",
+          "claim": "The calculateOrderTotal function incorrectly calculates tax on the pre-discount subtotal rather than the post-discount amount, causing overcharging on tax when discounts are applied.",
+          "failureMechanism": "When a discount coupon is applied (discountCouponAmount > 0), the tax is computed on the full subtotal (line 23: subtotal * options.taxRate) and then the discount is subtracted from the tax-inclusive total (line 24). This means tax is paid on the discount amount that the customer never actually pays.",
+          "trigger": "Any order with a non-zero discountCouponAmount in PricingOptions",
+          "requiredFix": "Change lines 22-24 to: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "introduced_by_patch",
+          "criticDecision": "approved",
+          "criticReason": "This is a newly introduced function in the patch (entire function is added code). The calculation logic is mathematically incorrect for standard sales tax treatment - tax must be calculated on the amount actually paid (post-discount). The author's own comment acknowledges this as a 'Regression'. The defect causes direct financial harm (overcharging customers) on every discounted transaction. This is not speculative - the math is verifiable and the trigger condition (discountCouponAmount > 0) is concrete and reachable.",
+          "contradictions": [],
+          "contributingReviewers": [
+            "structural"
+          ],
+          "metadata": {
+            "contributingReviewers": [
+              "structural"
+            ]
+          },
+          "id": "b99f6335d6db14b6",
+          "finalDisposition": "blocking",
+          "provenance": [],
+          "compositeScore": 58.85,
+          "scoreBreakdown": {
+            "severityScore": 75,
+            "confidenceScore": 98,
+            "evidenceStrengthScore": 45,
+            "blastRadiusScore": 10,
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
+          },
+          "blastRadius": 10,
+          "evidenceStrength": 45,
+          "line": 22
+        }
+      ],
+      "cleanFindings": [
+        {
+          "severity": "high",
+          "category": "correctness",
+          "title": "Negative discountCouponAmount inverts discount logic to surcharge",
+          "message": "The function subtracts options.discountCouponAmount from subtotal without validating it is non-negative. A negative discountCouponAmount would increase the taxable subtotal, effectively turning a discount into a surcharge. This violates the semantic meaning of a 'discount coupon' and could be exploited or triggered by buggy callers. Additionally, taxRate and item price/quantity lack validation, allowing negative values to produce incorrect totals.",
+          "file": "src/billing/pricing.ts",
+          "startLine": 16,
+          "endLine": 26,
+          "confidence": 0.95,
+          "evidence": [
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 23,
+              "endLine": 23,
+              "relationship": "direct",
+              "explanation": "Line 23: const discountedSubtotal = Math.max(0, subtotal - options.discountCouponAmount); - No validation that discountCouponAmount >= 0. Math.max only clamps the result, not the discount input.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 7,
+              "endLine": 10,
+              "relationship": "context",
+              "explanation": "PricingOptions interface defines discountCouponAmount as number with no constraints",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 24,
+              "endLine": 24,
+              "relationship": "direct",
+              "explanation": "Line 24: const tax = discountedSubtotal * options.taxRate; - No validation that taxRate >= 0",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 18,
+              "endLine": 20,
+              "relationship": "direct",
+              "explanation": "Lines 18-20: Loop accumulates item.price * item.quantity with no validation that price/quantity are non-negative",
+              "tier": "direct_changed",
+              "causalLink": ""
+            },
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 1,
+              "endLine": 5,
+              "relationship": "context",
+              "explanation": "PricingItem interface defines price and quantity as number with no constraints",
+              "tier": "direct_changed",
+              "causalLink": ""
+            }
+          ],
+          "relatedFiles": [],
+          "relatedSymbols": [
+            "calculateOrderTotal",
+            "PricingOptions",
+            "PricingItem"
+          ],
+          "impact": "Business logic inversion: negative discount acts as hidden surcharge, potentially overcharging customers or creating accounting discrepancies. Negative taxRate or item values could similarly produce incorrect totals.",
+          "suggestedFix": "Add input validation at function entry: if (options.discountCouponAmount < 0) throw new Error('discountCouponAmount must be non-negative'); if (options.taxRate < 0) throw new Error('taxRate must be non-negative'); Validate each item: if (item.price < 0 || item.quantity < 0) throw new Error('Item price and quantity must be non-negative');",
+          "reviewer": "semantic",
+          "claim": "calculateOrderTotal accepts negative discountCouponAmount which inverts discount to surcharge; also lacks validation for taxRate, price, and quantity",
+          "failureMechanism": "When options.discountCouponAmount < 0, the expression subtotal - options.discountCouponAmount becomes subtotal + |discount|, increasing the taxable base instead of decreasing it. Similar inversions occur with negative taxRate (negative tax) or negative price/quantity (negative subtotal).",
+          "trigger": "Caller passes options.discountCouponAmount < 0 (e.g., -10), or negative taxRate, or items with negative price/quantity",
+          "requiredFix": "",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "unknown",
+          "criticDecision": "uncertain",
+          "contradictions": [],
+          "criticReason": "Verified against repository reality and diff boundaries",
+          "contributingReviewers": [
+            "semantic"
+          ],
+          "metadata": {
+            "contributingReviewers": [
+              "semantic"
+            ]
+          },
+          "id": "13b027ca04cda9db",
+          "finalDisposition": "advisory",
+          "provenance": [],
+          "compositeScore": 65.75,
+          "scoreBreakdown": {
+            "severityScore": 75,
+            "confidenceScore": 95,
+            "evidenceStrengthScore": 95,
+            "blastRadiusScore": 10,
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
+          },
+          "blastRadius": 10,
+          "evidenceStrength": 95,
+          "line": 16
+        }
+      ],
+      "matchedFindings": [],
+      "unmatchedFindings": [
+        {
+          "severity": "high",
+          "category": "correctness",
+          "title": "Incorrect tax calculation order - tax applied before discount",
+          "message": "The newly introduced calculateOrderTotal function computes tax on the full subtotal before applying the discount coupon. This results in customers paying tax on the pre-discount amount, which is incorrect for standard sales tax calculations. The discount should be applied before tax calculation (tax on discounted amount). The code comment explicitly acknowledges this as a 'Regression', confirming the author is aware of the incorrect behavior. This causes measurable financial overcharging on every discounted order and creates billing discrepancies with potential compliance implications.",
+          "file": "src/billing/pricing.ts",
+          "startLine": 22,
+          "endLine": 24,
+          "confidence": 0.98,
+          "evidence": [
+            {
+              "file": "src/billing/pricing.ts",
+              "startLine": 22,
+              "endLine": 24,
+              "relationship": "direct_changed",
+              "explanation": "Lines 22-24 show the incorrect calculation: tax = subtotal * taxRate, then total = subtotal + tax - discountCouponAmount. This applies tax to the full subtotal before subtracting the discount. The comment on line 22 explicitly labels this as a 'Regression'.",
+              "tier": "direct_changed",
+              "causalLink": ""
+            }
+          ],
+          "relatedFiles": [],
+          "relatedSymbols": [
+            "calculateOrderTotal",
+            "PricingOptions"
+          ],
+          "impact": "Customers are overcharged on tax when discount coupons are used. For a $100 order with 10% discount and 8% tax: current code charges $100*1.08 - $10 = $98, correct calculation should be ($100-$10)*1.08 = $97.20. This creates billing discrepancies, customer trust issues, and potential tax compliance violations.",
+          "suggestedFix": "Apply discount before tax calculation: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+          "reviewer": "structural",
+          "claim": "The calculateOrderTotal function incorrectly calculates tax on the pre-discount subtotal rather than the post-discount amount, causing overcharging on tax when discounts are applied.",
+          "failureMechanism": "When a discount coupon is applied (discountCouponAmount > 0), the tax is computed on the full subtotal (line 23: subtotal * options.taxRate) and then the discount is subtracted from the tax-inclusive total (line 24). This means tax is paid on the discount amount that the customer never actually pays.",
+          "trigger": "Any order with a non-zero discountCouponAmount in PricingOptions",
+          "requiredFix": "Change lines 22-24 to: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+          "modelSuggestedDisposition": "blocking",
+          "introducedByPatch": "introduced_by_patch",
+          "criticDecision": "approved",
+          "criticReason": "This is a newly introduced function in the patch (entire function is added code). The calculation logic is mathematically incorrect for standard sales tax treatment - tax must be calculated on the amount actually paid (post-discount). The author's own comment acknowledges this as a 'Regression'. The defect causes direct financial harm (overcharging customers) on every discounted transaction. This is not speculative - the math is verifiable and the trigger condition (discountCouponAmount > 0) is concrete and reachable.",
+          "contradictions": [],
+          "contributingReviewers": [
+            "structural"
+          ],
+          "metadata": {
+            "contributingReviewers": [
+              "structural"
+            ]
+          },
+          "id": "b99f6335d6db14b6",
+          "finalDisposition": "blocking",
+          "provenance": [],
+          "compositeScore": 58.85,
+          "scoreBreakdown": {
+            "severityScore": 75,
+            "confidenceScore": 98,
+            "evidenceStrengthScore": 45,
+            "blastRadiusScore": 10,
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
+          },
+          "blastRadius": 10,
+          "evidenceStrength": 45,
+          "line": 22
+        }
+      ],
+      "rawFindingsCount": 1,
+      "actualFindings": 1,
+      "expectedFindings": 1,
+      "negativeFindings": 1,
+      "latencyMs": 960256,
+      "vulnerableLatencyMs": 416332,
+      "cleanLatencyMs": 543882,
+      "promptTokens": 16533,
+      "completionTokens": 8164,
+      "totalTokens": 24697,
+      "requestCount": 6,
+      "apiFailures": 1,
+      "timeoutCount": 1,
+      "byReviewer": {
+        "structural": 1
+      },
+      "reviewerSpecificFindings": {
+        "critic": [
+          {
+            "severity": "high",
+            "category": "correctness",
+            "title": "Incorrect tax calculation order - tax applied before discount",
+            "message": "The calculateOrderTotal function computes tax on the full subtotal before applying the discount coupon. This results in customers paying tax on the pre-discount amount, which is typically incorrect for sales tax calculations. The discount should be applied before tax calculation (tax on discounted amount), not after. The code comment itself acknowledges this as a 'Regression'.",
+            "file": "src/billing/pricing.ts",
+            "startLine": 16,
+            "endLine": 26,
+            "confidence": 0.95,
+            "evidence": [
+              {
+                "file": "src/billing/pricing.ts",
+                "startLine": 22,
+                "endLine": 24,
+                "relationship": "direct",
+                "explanation": "Lines 22-24 show the incorrect calculation: tax = subtotal * taxRate, then total = subtotal + tax - discountCouponAmount. This applies tax to the full subtotal before subtracting the discount.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              }
+            ],
+            "relatedFiles": [],
+            "relatedSymbols": [
+              "calculateOrderTotal",
+              "PricingOptions"
+            ],
+            "impact": "Customers are overcharged on tax when discount coupons are used. For a $100 order with 10% discount and 8% tax: current code charges $100*1.08 - $10 = $98, correct calculation should be ($100-$10)*1.08 = $97.20. This creates billing discrepancies and potential compliance issues.",
+            "suggestedFix": "Apply discount before tax calculation: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+            "reviewer": "structural",
+            "claim": "The calculateOrderTotal function incorrectly calculates tax on the pre-discount subtotal rather than the post-discount amount, causing overcharging on tax when discounts are applied.",
+            "failureMechanism": "When a discount coupon is applied (discountCouponAmount > 0), the tax is computed on the full subtotal (line 23: subtotal * options.taxRate) and then the discount is subtracted from the tax-inclusive total (line 24). This means tax is paid on the discount amount that the customer never actually pays.",
+            "trigger": "Any order with a non-zero discountCouponAmount in PricingOptions",
+            "requiredFix": "",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "unknown",
+            "criticDecision": "uncertain",
+            "contradictions": [],
+            "id": "finding-critic-0",
+            "finalRank": 1,
+            "status": "open"
+          }
+        ],
+        "structural": [
+          {
+            "severity": "high",
+            "category": "correctness",
+            "title": "Incorrect tax calculation order - tax applied before discount",
+            "message": "The newly introduced calculateOrderTotal function computes tax on the full subtotal before applying the discount coupon. This results in customers paying tax on the pre-discount amount, which is incorrect for standard sales tax calculations. The discount should be applied before tax calculation (tax on discounted amount). The code comment explicitly acknowledges this as a 'Regression', confirming the author is aware of the incorrect behavior. This causes measurable financial overcharging on every discounted order and creates billing discrepancies with potential compliance implications.",
+            "file": "src/billing/pricing.ts",
+            "startLine": 22,
+            "endLine": 24,
+            "confidence": 0.98,
+            "evidence": [
+              {
+                "file": "src/billing/pricing.ts",
+                "startLine": 22,
+                "endLine": 24,
+                "relationship": "direct_changed",
+                "explanation": "Lines 22-24 show the incorrect calculation: tax = subtotal * taxRate, then total = subtotal + tax - discountCouponAmount. This applies tax to the full subtotal before subtracting the discount. The comment on line 22 explicitly labels this as a 'Regression'.",
+                "tier": "direct_changed",
+                "causalLink": ""
+              }
+            ],
+            "relatedFiles": [],
+            "relatedSymbols": [
+              "calculateOrderTotal",
+              "PricingOptions"
+            ],
+            "impact": "Customers are overcharged on tax when discount coupons are used. For a $100 order with 10% discount and 8% tax: current code charges $100*1.08 - $10 = $98, correct calculation should be ($100-$10)*1.08 = $97.20. This creates billing discrepancies, customer trust issues, and potential tax compliance violations.",
+            "suggestedFix": "Apply discount before tax calculation: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+            "reviewer": "structural",
+            "claim": "The calculateOrderTotal function incorrectly calculates tax on the pre-discount subtotal rather than the post-discount amount, causing overcharging on tax when discounts are applied.",
+            "failureMechanism": "When a discount coupon is applied (discountCouponAmount > 0), the tax is computed on the full subtotal (line 23: subtotal * options.taxRate) and then the discount is subtracted from the tax-inclusive total (line 24). This means tax is paid on the discount amount that the customer never actually pays.",
+            "trigger": "Any order with a non-zero discountCouponAmount in PricingOptions",
+            "requiredFix": "Change lines 22-24 to: const discountedSubtotal = subtotal - options.discountCouponAmount; const tax = discountedSubtotal * options.taxRate; const total = discountedSubtotal + tax;",
+            "modelSuggestedDisposition": "blocking",
+            "introducedByPatch": "introduced_by_patch",
+            "criticDecision": "approved",
+            "criticReason": "This is a newly introduced function in the patch (entire function is added code). The calculation logic is mathematically incorrect for standard sales tax treatment - tax must be calculated on the amount actually paid (post-discount). The author's own comment acknowledges this as a 'Regression'. The defect causes direct financial harm (overcharging customers) on every discounted transaction. This is not speculative - the math is verifiable and the trigger condition (discountCouponAmount > 0) is concrete and reachable.",
+            "contradictions": [],
+            "id": "finding-structural-0",
+            "finalRank": 1,
+            "status": "open"
+          }
+        ]
+      },
+      "criticRetainedCount": 1,
+      "vulnerableDiffLines": 13,
+      "cleanDiffLines": 13,
+      "passed": false
+    },
+    {
+      "fixtureName": "refactor/unrelated-refactor",
+      "category": "refactor",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": true,
+      "truePositives": 0,
+      "falsePositives": 1,
+      "falseNegatives": 0,
+      "precision": 0,
+      "recall": 1,
+      "falsePositiveRate": 1,
       "blockingFalsePositives": 0,
       "blockingFalsePositiveRate": 0,
       "dispositionBreakdown": {
@@ -555,47 +1324,35 @@
       },
       "vulnerableFindings": [
         {
-          "severity": "critical",
-          "category": "security",
-          "title": "SQL Injection in getUserById via Unescaped String Interpolation",
-          "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
-          "file": "src/db/users.ts",
-          "startLine": 15,
-          "endLine": 20,
-          "confidence": 1,
+          "severity": "medium",
+          "category": "correctness",
+          "title": "formatUserGreeting throws TypeError on null/undefined userName",
+          "message": "The function assumes userName is a valid string and calls .trim() directly. If null or undefined is passed (e.g., from optional user data or untyped callers), it will throw 'Cannot read properties of null/undefined' at runtime. Add a guard clause or default value.",
+          "file": "src/utils/format.ts",
+          "startLine": 7,
+          "endLine": 7,
+          "confidence": 0.9,
           "evidence": [
             {
-              "file": "src/db/users.ts",
-              "startLine": 17,
-              "endLine": 17,
+              "file": "src/utils/format.ts",
+              "startLine": 7,
+              "endLine": 7,
               "relationship": "direct",
-              "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
-              "tier": "direct_changed",
-              "causalLink": ""
-            },
-            {
-              "file": "src/db/users.ts",
-              "startLine": 18,
-              "endLine": 18,
-              "relationship": "direct",
-              "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+              "explanation": "Line 7 calls userName.trim() without checking if userName is null/undefined first",
               "tier": "direct_changed",
               "causalLink": ""
             }
           ],
-          "relatedFiles": [
-            "src/db/client.ts"
-          ],
+          "relatedFiles": [],
           "relatedSymbols": [
-            "getUserById",
-            "DatabaseClient"
+            "formatUserGreeting"
           ],
-          "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
-          "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
-          "reviewer": "security",
-          "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
-          "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
-          "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+          "impact": "Runtime crash when user data is incomplete or missing, causing UI failures in greeting displays",
+          "suggestedFix": "Add null/undefined check: const cleanName = (userName ?? '').trim(); or validate input at start of function",
+          "reviewer": "semantic",
+          "claim": "formatUserGreeting will throw TypeError if userName is null or undefined",
+          "failureMechanism": "JavaScript throws TypeError when attempting to call .trim() on null or undefined values",
+          "trigger": "Calling formatUserGreeting(null) or formatUserGreeting(undefined) or passing a user object with missing name property",
           "requiredFix": "",
           "modelSuggestedDisposition": "blocking",
           "introducedByPatch": "unknown",
@@ -603,74 +1360,63 @@
           "contradictions": [],
           "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "security"
+            "semantic"
           ],
           "metadata": {
             "contributingReviewers": [
-              "security"
+              "semantic"
             ]
           },
-          "id": "6f0470246fb80e7c",
+          "id": "9f3921c9053afb00",
           "finalDisposition": "advisory",
           "provenance": [],
-          "compositeScore": 75.75,
+          "compositeScore": 49.75,
           "scoreBreakdown": {
-            "severityScore": 100,
-            "confidenceScore": 100,
-            "evidenceStrengthScore": 75,
+            "severityScore": 50,
+            "confidenceScore": 90,
+            "evidenceStrengthScore": 45,
             "blastRadiusScore": 10,
-            "securityImpactScore": 100,
-            "regressionProbabilityScore": 30
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
           },
           "blastRadius": 10,
-          "evidenceStrength": 75,
-          "line": 15
+          "evidenceStrength": 45,
+          "line": 7
         }
       ],
       "cleanFindings": [],
-      "matchedFindings": [
+      "matchedFindings": [],
+      "unmatchedFindings": [
         {
-          "severity": "critical",
-          "category": "security",
-          "title": "SQL Injection in getUserById via Unescaped String Interpolation",
-          "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
-          "file": "src/db/users.ts",
-          "startLine": 15,
-          "endLine": 20,
-          "confidence": 1,
+          "severity": "medium",
+          "category": "correctness",
+          "title": "formatUserGreeting throws TypeError on null/undefined userName",
+          "message": "The function assumes userName is a valid string and calls .trim() directly. If null or undefined is passed (e.g., from optional user data or untyped callers), it will throw 'Cannot read properties of null/undefined' at runtime. Add a guard clause or default value.",
+          "file": "src/utils/format.ts",
+          "startLine": 7,
+          "endLine": 7,
+          "confidence": 0.9,
           "evidence": [
             {
-              "file": "src/db/users.ts",
-              "startLine": 17,
-              "endLine": 17,
+              "file": "src/utils/format.ts",
+              "startLine": 7,
+              "endLine": 7,
               "relationship": "direct",
-              "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
-              "tier": "direct_changed",
-              "causalLink": ""
-            },
-            {
-              "file": "src/db/users.ts",
-              "startLine": 18,
-              "endLine": 18,
-              "relationship": "direct",
-              "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+              "explanation": "Line 7 calls userName.trim() without checking if userName is null/undefined first",
               "tier": "direct_changed",
               "causalLink": ""
             }
           ],
-          "relatedFiles": [
-            "src/db/client.ts"
-          ],
+          "relatedFiles": [],
           "relatedSymbols": [
-            "getUserById",
-            "DatabaseClient"
+            "formatUserGreeting"
           ],
-          "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
-          "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
-          "reviewer": "security",
-          "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
-          "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
-          "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+          "impact": "Runtime crash when user data is incomplete or missing, causing UI failures in greeting displays",
+          "suggestedFix": "Add null/undefined check: const cleanName = (userName ?? '').trim(); or validate input at start of function",
+          "reviewer": "semantic",
+          "claim": "formatUserGreeting will throw TypeError if userName is null or undefined",
+          "failureMechanism": "JavaScript throws TypeError when attempting to call .trim() on null or undefined values",
+          "trigger": "Calling formatUserGreeting(null) or formatUserGreeting(undefined) or passing a user object with missing name property",
           "requiredFix": "",
           "modelSuggestedDisposition": "blocking",
           "introducedByPatch": "unknown",
@@ -678,91 +1424,78 @@
           "contradictions": [],
           "criticReason": "Verified against repository reality and diff boundaries",
           "contributingReviewers": [
-            "security"
+            "semantic"
           ],
           "metadata": {
             "contributingReviewers": [
-              "security"
+              "semantic"
             ]
           },
-          "id": "6f0470246fb80e7c",
+          "id": "9f3921c9053afb00",
           "finalDisposition": "advisory",
           "provenance": [],
-          "compositeScore": 75.75,
+          "compositeScore": 49.75,
           "scoreBreakdown": {
-            "severityScore": 100,
-            "confidenceScore": 100,
-            "evidenceStrengthScore": 75,
+            "severityScore": 50,
+            "confidenceScore": 90,
+            "evidenceStrengthScore": 45,
             "blastRadiusScore": 10,
-            "securityImpactScore": 100,
-            "regressionProbabilityScore": 30
+            "securityImpactScore": 0,
+            "regressionProbabilityScore": 85
           },
           "blastRadius": 10,
-          "evidenceStrength": 75,
-          "line": 15
+          "evidenceStrength": 45,
+          "line": 7
         }
       ],
-      "unmatchedFindings": [],
       "rawFindingsCount": 1,
       "actualFindings": 1,
-      "expectedFindings": 1,
+      "expectedFindings": 0,
       "negativeFindings": 0,
-      "latencyMs": 258565,
-      "vulnerableLatencyMs": 177448,
-      "cleanLatencyMs": 81083,
-      "promptTokens": 15697,
-      "completionTokens": 6941,
-      "totalTokens": 22638,
-      "requestCount": 7,
-      "apiFailures": 0,
+      "latencyMs": 724964,
+      "vulnerableLatencyMs": 283799,
+      "cleanLatencyMs": 441120,
+      "promptTokens": 8707,
+      "completionTokens": 3124,
+      "totalTokens": 11831,
+      "requestCount": 5,
+      "apiFailures": 1,
       "timeoutCount": 0,
       "byReviewer": {
-        "security": 1
+        "semantic": 1
       },
       "reviewerSpecificFindings": {
         "critic": [
           {
-            "severity": "critical",
-            "category": "security",
-            "title": "SQL Injection Vulnerability in getUserById via String Interpolation",
-            "message": "The getUserById function constructs SQL queries using template literal string interpolation with unvalidated user input (userId). This allows attackers to inject arbitrary SQL by providing malicious input such as `' OR '1'='1` or `'; DROP TABLE users; --`. The code comment explicitly acknowledges this vulnerability. Parameterized queries must be used instead.",
-            "file": "src/db/users.ts",
-            "startLine": 15,
-            "endLine": 20,
-            "confidence": 0.98,
+            "severity": "medium",
+            "category": "correctness",
+            "title": "formatUserGreeting throws TypeError on null/undefined userName",
+            "message": "The function assumes userName is a valid string and calls .trim() directly. If null or undefined is passed (e.g., from optional user data), it will throw 'Cannot read properties of null/undefined' at runtime. Add a guard clause or default value.",
+            "file": "src/utils/format.ts",
+            "startLine": 6,
+            "endLine": 10,
+            "confidence": 0.9,
             "evidence": [
               {
-                "file": "src/db/users.ts",
-                "startLine": 17,
-                "endLine": 17,
+                "file": "src/utils/format.ts",
+                "startLine": 7,
+                "endLine": 7,
                 "relationship": "direct",
-                "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
-                "tier": "direct_changed",
-                "causalLink": ""
-              },
-              {
-                "file": "src/db/users.ts",
-                "startLine": 18,
-                "endLine": 18,
-                "relationship": "direct",
-                "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
+                "explanation": "Line 7 calls userName.trim() without checking if userName is null/undefined first",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
             ],
-            "relatedFiles": [
-              "src/db/client.ts"
-            ],
+            "relatedFiles": [],
             "relatedSymbols": [
-              "getUserById",
-              "DatabaseClient"
+              "formatUserGreeting"
             ],
-            "impact": "An attacker can bypass authentication, extract all user records, modify or delete database data, or execute administrative operations depending on database permissions. This is a critical security vulnerability that could lead to full database compromise.",
-            "suggestedFix": "Use parameterized queries with placeholders. Example fix:\n\nexport async function getUserById(db: DatabaseClient, userId: string): Promise<UserRecord | null> {\n  const query = 'SELECT * FROM users WHERE id = $1';\n  const result = await db.query(query, [userId]);\n  return (result.rows[0] as UserRecord) ?? null;\n}\n\nNote: The exact placeholder syntax ($1, ?, %s) depends on the database driver used in DatabaseClient.",
-            "reviewer": "structural",
-            "claim": "The getUserById function at src/db/users.ts:15-20 constructs SQL queries via string interpolation of untrusted userId parameter, enabling SQL injection attacks.",
-            "failureMechanism": "When userId contains SQL metacharacters (e.g., single quotes, semicolons, comments), the interpolated query string becomes syntactically valid SQL that alters the intended query logic. For example, userId = \"' OR '1'='1\" produces: SELECT * FROM users WHERE id = '' OR '1'='1', which returns all rows.",
-            "trigger": "Any call to getUserById with a userId parameter containing SQL injection payloads such as: `' OR '1'='1`, `'; DROP TABLE users; --`, `' UNION SELECT * FROM passwords --`",
+            "impact": "Runtime crash when user data is incomplete or missing, causing UI failures in greeting displays",
+            "suggestedFix": "Add null/undefined check: const cleanName = (userName ?? '').trim(); or validate input at start of function",
+            "reviewer": "semantic",
+            "claim": "formatUserGreeting will throw TypeError if userName is null or undefined",
+            "failureMechanism": "JavaScript throws TypeError when attempting to call .trim() on null or undefined values",
+            "trigger": "Calling formatUserGreeting(null) or formatUserGreeting(undefined) or passing a user object with missing name property",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
@@ -773,152 +1506,184 @@
             "status": "open"
           },
           {
-            "severity": "critical",
-            "category": "security",
-            "title": "SQL Injection vulnerability in getUserById function",
-            "message": "The getUserById function constructs SQL queries via unsanitized string interpolation of the userId parameter. This allows attackers to inject arbitrary SQL code, leading to authentication bypass, data exfiltration, data manipulation, or database destruction. The inline comment explicitly acknowledges the vulnerability.",
-            "file": "src/db/users.ts",
-            "startLine": 15,
-            "endLine": 20,
-            "confidence": 1,
+            "severity": "low",
+            "category": "correctness",
+            "title": "formatUserGreeting produces awkward output for empty/whitespace-only names",
+            "message": "When userName is empty string or whitespace-only, trim() returns empty string, resulting in 'Hello, !' which is poor UX. Consider providing a fallback like 'Guest' or 'User'.",
+            "file": "src/utils/format.ts",
+            "startLine": 6,
+            "endLine": 10,
+            "confidence": 0.8,
             "evidence": [
               {
-                "file": "src/db/users.ts",
-                "startLine": 17,
-                "endLine": 18,
+                "file": "src/utils/format.ts",
+                "startLine": 7,
+                "endLine": 9,
                 "relationship": "direct",
-                "explanation": "Line 17 shows the vulnerable interpolation: `const query = `SELECT * FROM users WHERE id = '${userId}'`;`. Line 18 executes this unsanitized query via db.query().",
+                "explanation": "Lines 7-9 show trim() on empty string produces empty string, leading to 'Hello, !' output",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
             ],
             "relatedFiles": [],
             "relatedSymbols": [
-              "getUserById"
+              "formatUserGreeting"
             ],
-            "impact": "Attackers can bypass authentication (e.g., userId = \"' OR '1'='1\"), extract all user records, modify/delete data, or execute administrative database operations depending on DB permissions.",
-            "suggestedFix": "Use parameterized queries / prepared statements. Example: `const result = await db.query('SELECT * FROM users WHERE id = $1', [userId]);` (adjust placeholder syntax per database driver).",
-            "reviewer": "security",
-            "claim": "The getUserById function is vulnerable to SQL injection due to unsanitized string interpolation of the userId parameter into the SQL query string.",
-            "failureMechanism": "When userId contains SQL meta-characters (e.g., single quotes, semicolons, comments), the interpolated query becomes syntactically valid SQL that alters the intended WHERE clause logic or appends additional statements.",
-            "trigger": "Any caller passing a userId containing single quotes, SQL keywords, or comment sequences (e.g., \"admin'--\", \"' OR '1'='1\").",
+            "impact": "Degraded user experience showing malformed greeting when user name is missing or blank",
+            "suggestedFix": "Add fallback: const cleanName = userName.trim() || 'Guest';",
+            "reviewer": "semantic",
+            "claim": "formatUserGreeting returns 'Hello, !' for empty or whitespace-only userName",
+            "failureMechanism": "String.trim() on whitespace-only input returns empty string, which interpolates as empty in template literal",
+            "trigger": "Calling formatUserGreeting('') or formatUserGreeting('   ')",
             "requiredFix": "",
-            "modelSuggestedDisposition": "blocking",
+            "modelSuggestedDisposition": "advisory",
             "introducedByPatch": "unknown",
             "criticDecision": "uncertain",
             "contradictions": [],
-            "id": "finding-critic-0",
-            "finalRank": 1,
+            "id": "finding-critic-1",
+            "finalRank": 2,
             "status": "open"
           }
         ],
-        "security": [
+        "semantic": [
           {
-            "severity": "critical",
-            "category": "security",
-            "title": "SQL Injection in getUserById via Unescaped String Interpolation",
-            "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
-            "file": "src/db/users.ts",
-            "startLine": 15,
-            "endLine": 20,
-            "confidence": 1,
+            "severity": "medium",
+            "category": "correctness",
+            "title": "formatUserGreeting throws TypeError on null/undefined userName",
+            "message": "The function assumes userName is a valid string and calls .trim() directly. If null or undefined is passed (e.g., from optional user data or untyped callers), it will throw 'Cannot read properties of null/undefined' at runtime. Add a guard clause or default value.",
+            "file": "src/utils/format.ts",
+            "startLine": 7,
+            "endLine": 7,
+            "confidence": 0.9,
             "evidence": [
               {
-                "file": "src/db/users.ts",
-                "startLine": 17,
-                "endLine": 17,
-                "relationship": "vulnerable_sink",
-                "explanation": "Line 17 constructs the SQL query using unescaped string interpolation: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - the userId parameter is directly embedded into the query string.",
-                "tier": "direct_changed",
-                "causalLink": ""
-              },
-              {
-                "file": "src/db/users.ts",
-                "startLine": 18,
-                "endLine": 18,
-                "relationship": "execution_sink",
-                "explanation": "Line 18 executes the constructed query via `await db.query(query)` without any sanitization or parameterization.",
+                "file": "src/utils/format.ts",
+                "startLine": 7,
+                "endLine": 7,
+                "relationship": "direct",
+                "explanation": "Line 7 calls userName.trim() without checking if userName is null/undefined first",
                 "tier": "direct_changed",
                 "causalLink": ""
               }
             ],
             "relatedFiles": [],
             "relatedSymbols": [
-              "getUserById"
+              "formatUserGreeting"
             ],
-            "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
-            "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
-            "reviewer": "security",
-            "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
-            "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
-            "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
+            "impact": "Runtime crash when user data is incomplete or missing, causing UI failures in greeting displays",
+            "suggestedFix": "Add null/undefined check: const cleanName = (userName ?? '').trim(); or validate input at start of function",
+            "reviewer": "semantic",
+            "claim": "formatUserGreeting will throw TypeError if userName is null or undefined",
+            "failureMechanism": "JavaScript throws TypeError when attempting to call .trim() on null or undefined values",
+            "trigger": "Calling formatUserGreeting(null) or formatUserGreeting(undefined) or passing a user object with missing name property",
             "requiredFix": "",
             "modelSuggestedDisposition": "blocking",
             "introducedByPatch": "unknown",
             "criticDecision": "uncertain",
             "contradictions": [],
-            "id": "finding-security-0",
-            "finalRank": 1,
-            "status": "open"
-          }
-        ],
-        "structural": [
-          {
-            "severity": "critical",
-            "category": "security",
-            "title": "SQL Injection in getUserById via Unescaped String Interpolation",
-            "message": "The getUserById function constructs a SQL query by directly interpolating the userId parameter into the query string using template literals. This allows an attacker to inject arbitrary SQL code by providing a malicious userId value (e.g., \"' OR '1'='1\" or \"; DROP TABLE users;--\"). The query is executed without parameterization, making it fully exploitable.",
-            "file": "src/db/users.ts",
-            "startLine": 15,
-            "endLine": 20,
-            "confidence": 1,
-            "evidence": [
-              {
-                "file": "src/db/users.ts",
-                "startLine": 17,
-                "endLine": 17,
-                "relationship": "direct",
-                "explanation": "Line 17 shows the vulnerable query construction: `const query = `SELECT * FROM users WHERE id = '${userId}'`;` - userId is directly interpolated without sanitization or parameterization.",
-                "tier": "direct_changed",
-                "causalLink": ""
-              },
-              {
-                "file": "src/db/users.ts",
-                "startLine": 18,
-                "endLine": 18,
-                "relationship": "direct",
-                "explanation": "Line 18 executes the unsanitized query: `const result = await db.query(query);`",
-                "tier": "direct_changed",
-                "causalLink": ""
-              }
-            ],
-            "relatedFiles": [
-              "src/db/client.ts"
-            ],
-            "relatedSymbols": [
-              "getUserById",
-              "DatabaseClient"
-            ],
-            "impact": "An attacker can execute arbitrary SQL commands on the database, leading to data theft (exfiltration of all user records), data manipulation (modifying/deleting users), privilege escalation (changing roles), or complete database compromise (DROP TABLE, command execution via PostgreSQL extensions).",
-            "suggestedFix": "Use parameterized queries. Replace the string interpolation with a parameterized query: `const query = 'SELECT * FROM users WHERE id = $1'; const result = await db.query(query, [userId]);` This ensures the userId is treated as a data parameter, not executable SQL.",
-            "reviewer": "security",
-            "claim": "The getUserById function in src/db/users.ts is vulnerable to SQL injection because it uses unescaped string interpolation to construct a SQL query from untrusted user input (userId parameter).",
-            "failureMechanism": "When an attacker supplies a userId like `' OR '1'='1`, the resulting query becomes `SELECT * FROM users WHERE id = '' OR '1'='1'`, which returns all users. More dangerous payloads like `'; DROP TABLE users;--` can destroy data. The database driver executes the concatenated string as a single SQL statement.",
-            "trigger": "Any call to getUserById with a userId parameter containing SQL metacharacters (single quotes, semicolons, comments, etc.). This could originate from HTTP request parameters, API inputs, or any upstream caller that passes unvalidated user input.",
-            "requiredFix": "",
-            "modelSuggestedDisposition": "blocking",
-            "introducedByPatch": "unknown",
-            "criticDecision": "uncertain",
-            "contradictions": [],
-            "id": "finding-structural-0",
+            "id": "finding-semantic-0",
             "finalRank": 1,
             "status": "open"
           }
         ]
       },
       "criticRetainedCount": 1,
-      "vulnerableDiffLines": 8,
-      "cleanDiffLines": 8,
+      "vulnerableDiffLines": 7,
+      "cleanDiffLines": 7,
+      "passed": false
+    },
+    {
+      "fixtureName": "docs/documentation-only",
+      "category": "docs",
+      "language": "markdown",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": true,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "precision": 1,
+      "recall": 1,
+      "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 0,
+      "negativeFindings": 0,
+      "latencyMs": 37,
+      "vulnerableLatencyMs": 5,
+      "cleanLatencyMs": 6,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 0,
+      "apiFailures": 0,
+      "timeoutCount": 0,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 5,
+      "cleanDiffLines": 5,
+      "passed": true
+    },
+    {
+      "fixtureName": "test/test-only",
+      "category": "test",
+      "language": "typescript",
+      "mode": "live_pipeline",
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "detectedExpected": true,
+      "truePositives": 0,
+      "falsePositives": 0,
+      "falseNegatives": 0,
+      "precision": 1,
+      "recall": 1,
+      "falsePositiveRate": 0,
+      "blockingFalsePositives": 0,
+      "blockingFalsePositiveRate": 0,
+      "dispositionBreakdown": {
+        "blocking": 0,
+        "advisory": 0,
+        "informational": 0,
+        "rejected": 0
+      },
+      "vulnerableFindings": [],
+      "cleanFindings": [],
+      "matchedFindings": [],
+      "unmatchedFindings": [],
+      "rawFindingsCount": 0,
+      "actualFindings": 0,
+      "expectedFindings": 0,
+      "negativeFindings": 0,
+      "latencyMs": 2086,
+      "vulnerableLatencyMs": 1078,
+      "cleanLatencyMs": 983,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
+      "requestCount": 0,
+      "apiFailures": 0,
+      "timeoutCount": 0,
+      "byReviewer": {},
+      "reviewerSpecificFindings": {},
+      "criticRetainedCount": 0,
+      "vulnerableDiffLines": 6,
+      "cleanDiffLines": 6,
       "passed": true
     }
   ]
