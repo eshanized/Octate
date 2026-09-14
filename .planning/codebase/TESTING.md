@@ -1,180 +1,118 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-09-11
+**Analysis Date:** 2026-09-14
 
 ## Test Framework
 
 **Runner:**
-- Jest 30.5.1 with `ts-jest` 29.4.12 (ESM preset)
-- Configuration: `jest.config.ts`
-- Environment: Node.js with native ECMAScript modules enabled via `NODE_OPTIONS=--experimental-vm-modules`
-- TypeScript Transform: `ts-jest` targeting `tsconfig.json` with `useESM: true`
+- Jest 30.5.1 with `ts-jest` 29.4.12 (ESM preset).
+- Configuration: `jest.config.ts`.
+- Runtime Options: Native ES modules enabled via `NODE_OPTIONS=--experimental-vm-modules`.
+- TypeScript Transform: `ts-jest` targeting `tsconfig.json` with `useESM: true`.
 
 **Assertion Library:**
-- `@jest/globals` (`describe`, `it`, `expect`, `beforeEach`, `afterEach`, `beforeAll`, `jest`)
+- `@jest/globals` (`describe`, `it`, `expect`, `beforeEach`, `afterEach`, `beforeAll`, `afterAll`, `jest`).
 
 **Run Commands:**
 ```bash
-pnpm test                               # Run all 54 test suites (631 tests)
-pnpm test:watch                         # Run tests in watch mode
-NODE_OPTIONS=--experimental-vm-modules npx jest src/review/  # Run specific layer tests
-pnpm test -- path/to/file.test.ts       # Run single test file
-pnpm test -- --coverage                 # Generate test coverage report
+pnpm test                               # Run full test suite (81 test suites, 947 tests)
+pnpm test:watch                         # Run tests in interactive watch mode
+pnpm test -- src/review/engine.test.ts  # Run single test file
+NODE_OPTIONS=--experimental-vm-modules npx jest src/renderers/   # Run specific directory
+pnpm test -- --coverage                 # Generate coverage report in coverage/
+pnpm typecheck                          # Verify TypeScript types without emitting code
+pnpm bench                              # Run micro-benchmarks via tsx scripts/bench.ts
+tsx benchmark/evaluate.ts               # Run empirical benchmark precision/recall evaluation
 ```
 
 **Test Suite Health:**
-- **54 test suites**, **631 tests**, 0 snapshots
-- 100% passing rate across CLI, commands, repository, analysis, intelligence, model provider, and review engine layers.
+- **81 test suites**, **947 tests**, 0 snapshots.
+- **100% passing rate** across all layers (CLI, commands, application, review engine, renderers, diagnostics, intelligence, model, repository, cache, config, logging, cancellation, and stress suites).
 
 ## Test File Organization
 
-**Location:** Co-located next to the corresponding source module:
+**1. Co-Located Unit & Component Tests:**
+Every source module has its corresponding unit test file directly beside it:
+- `src/cli.ts` → `src/cli.test.ts`
 - `src/commands/review.ts` → `src/commands/review.test.ts`
-- `src/intelligence/graph/reference.ts` → `src/intelligence/graph/reference.test.ts`
-- `src/model/providers/nvidia.ts` → `src/model/providers/nvidia.test.ts`
-- `src/review/engine.ts` → `src/review/engine.test.ts`
+- `src/application/review.ts` → `src/application/review.test.ts`
+- `src/application/policy.ts` → `src/application/policy.test.ts`
+- `src/renderers/tui/app.tsx` → `src/renderers/tui/components.test.tsx`
+- `src/renderers/sarif.ts` → `src/renderers/sarif.test.ts`
+- `src/review/evidence-validator.ts` → `src/review/evidence-validator.test.ts`
+- `src/review/decision-gate.ts` → `src/review/decision-gate.test.ts`
 
-**Complete Test Suite Map (54 Suites):**
-```
-src/
-├── analysis/
-│   ├── orchestrator.test.ts          # Pipeline integration (parse → symbols → diagnostics)
-│   ├── parser/
-│   │   ├── index.test.ts             # Tree-sitter parsing & AST creation
-│   │   └── languages.test.ts         # Language detection & grammar loading
-│   ├── symbols/
-│   │   └── index.test.ts             # AST query extraction for TS and Python
-│   └── diagnostics/
-│       ├── index.test.ts             # Parallel diagnostics execution with concurrency pool
-│       ├── severity.test.ts          # Severity normalization & diagnostic mapping
-│       └── tools.test.ts             # Tool detection & subprocess execution
-├── cache/
-│   ├── identity.test.ts              # Project identity & directory hashing
-│   ├── keys.test.ts                  # Cache key generation, tool versions, config hashes
-│   ├── lru.test.ts                   # In-memory LRU eviction & TTL
-│   ├── pool.test.ts                  # PromisePool concurrency limiting
-│   └── store.test.ts                 # Atomic file writes & cache storage
-├── cancellation/
-│   ├── controller.test.ts            # CancellationController signal propagation
-│   └── subprocess.test.ts            # spawnWithSignal & process tree termination
-├── commands/
-│   ├── doctor.test.ts                # Doctor environment checks
-│   ├── init.test.ts                  # Init configuration generation
-│   └── review.test.ts                # Review command pipeline integration
-├── config/
-│   ├── loader.test.ts                # File resolution & cosmiconfig loading
-│   ├── merger.test.ts                # Hierarchical config precedence
-│   └── schema.test.ts                # Zod validation & defaults
-├── errors/
-│   └── index.test.ts                 # Error classes, exit codes, & type guards
-├── intelligence/
-│   ├── context/
-│   │   ├── budget.test.ts            # Token budgeting calculations & limits
-│   │   ├── candidates.test.ts        # Candidate ranking & selection algorithms
-│   │   ├── engine.test.ts            # ContextEngine pipeline assembly
-│   │   ├── serializer.test.ts        # Sandwich prompt serialization & demarcation
-│   │   └── windowing.test.ts         # Context snippet extraction and windowing
-│   ├── graph/
-│   │   ├── dependency.test.ts        # Package & workspace dependency graph
-│   │   ├── reference.test.ts         # Caller/callee graph & reverse incoming lookup
-│   │   └── serializer.test.ts        # Graph disk serialization and loading
-│   ├── index/
-│   │   └── symbol-index.test.ts      # Multi-file symbol index & range queries
-│   └── resolver/
-│       └── path-resolver.test.ts     # Cross-file import path resolution
-├── logging/
-│   └── index.test.ts                 # Structured logging, child loggers, & redaction
-├── model/
-│   ├── abstraction.test.ts           # Model abstraction & provider factory
-│   ├── prompts/
-│   │   ├── loader.test.ts            # Prompt template file loader & fallback
-│   │   └── template.test.ts          # Regex template rendering engine
-│   ├── providers/
-│   │   ├── nvidia.test.ts            # LocalNvidiaProvider chat completion calls
-│   │   └── resilience.test.ts        # Timeout, exponential backoff, retries & pool(2)
-│   └── schema/
-│       ├── extractor.test.ts         # Markdown fence stripping & JSON extraction
-│       ├── finding.test.ts           # Compiled Zod findings schema validation
-│       ├── grounding.test.ts         # File existence & line bounds clamping
-│       └── repair.test.ts            # 2-turn error repair prompt construction
-├── repository/
-│   ├── discovery.test.ts             # Git root finding
-│   ├── filter.test.ts                # File filtering (binary, generated, symlink)
-│   ├── git.test.ts                   # isomorphic-git wrapper operations
-│   ├── ignore.test.ts                # .gitignore & .octateignore parsing
-│   ├── monorepo.test.ts              # Monorepo detection across package managers
-│   └── scope.test.ts                 # Scope resolution (--staged, --commit, etc.)
-├── review/
-│   ├── critic.test.ts                # Hard floor & two-stage critic filtering
-│   ├── dag.test.ts                   # Staged Review DAG runner with graceful degradation
-│   ├── dedup.test.ts                 # Multi-factor deduplication & evidence merging
-│   ├── engine.test.ts                # ReviewEngine 5-stage orchestration
-│   ├── heuristics.test.ts            # AST executable logic & security pattern triggers
-│   └── ranking.test.ts               # Composite ranking & Critical protection
-└── types/
-    └── index.test.ts                 # Domain type guards
-```
+**2. Stress Tests (`test/stress/`):**
+Dedicated stress tests verifying stability under load and large repository conditions:
+- `repository-git.stress.test.ts`: High commit count & large tree traversal.
+- `parser-security.stress.test.ts`: Deeply nested ASTs and malformed files.
+- `context-review-pipeline.stress.test.ts`: Large diff token windowing and budget limits.
+- `model-cli.stress.test.ts`: Concurrent model requests and cancellation handling.
+- `cache-fuzz.stress.test.ts`: High-concurrency atomic writes and LRU evictions.
 
-## Testing Patterns & Best Practices
+**3. False-Positive Reproduction Suite (`test/reproduction/`):**
+- `false-positives.test.ts`: Direct reproduction tests for known false-positive traps (safe type assertions, intentional error throwing, bounded loops, safe subprocess execution).
 
-### 1. Isolated Temporary Directories for Filesystem & Git Operations
-Tests creating repository states or cache files must use isolated temporary directories created in `beforeEach` and cleaned up in `afterEach`:
+**4. Empirical Evaluation Harness (`test/evaluation/` & `benchmark/`):**
+- `test/evaluation/evaluation.test.ts`: Validates precision, recall, and false-positive rate calculations.
+- `test/evaluation/benchmark-repo.test.ts`: Evaluates end-to-end review accuracy on synthetic benchmark fixtures.
+- `benchmark/evaluate.ts`: CLI evaluation harness comparing model output against `benchmark/expected-findings.json`.
 
+**5. Golden Test Fixtures (`test/fixtures/golden/`):**
+Structured test cases with 4 canonical files:
+- `baseline.ts`: Base version of the file.
+- `vulnerable.ts`: Modified version containing an intentional defect.
+- `clean.ts`: Modified version implementing a safe idiom or clean fix.
+- `expected.json`: Ground-truth expectation verifying whether a finding should or should not trigger.
+Categories covered: `security/`, `structural/`, `semantic/`, `refactor/`, `docs/`, `test/`.
+
+## Test Structure & Patterns
+
+**Standard Suite Structure:**
 ```typescript
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { mkdir, rm } from 'node:fs/promises';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 
-describe('isolated-fs-module', () => {
-  let testDir: string;
-  let originalCwd: string;
+describe('EvidenceValidator', () => {
+  let validator: EvidenceValidator;
 
-  beforeEach(async () => {
-    originalCwd = process.cwd();
-    testDir = join(tmpdir(), `octate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    await mkdir(testDir, { recursive: true });
-    process.chdir(testDir);
+  beforeEach(() => {
+    validator = new EvidenceValidator();
   });
 
-  afterEach(async () => {
-    process.chdir(originalCwd);
-    await rm(testDir, { recursive: true, force: true });
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('classifies compiler diagnostic corroboration as Tier 1', async () => {
+    // Arrange
+    const finding = createSampleFinding();
+    const diagnostics = [createSampleDiagnostic()];
+
+    // Act
+    const result = await validator.validate(finding, diagnostics);
+
+    // Assert
+    expect(result.tier).toBe('TIER_1_DIAGNOSTIC');
+    expect(result.verified).toBe(true);
   });
 });
 ```
 
-### 2. MockReviewModel for Review Layer & DAG Tests
-The review engine uses `MockReviewModel` (`src/review/__tests__/mocks.ts`) allowing role-specific response handlers for structural, semantic, security, and critic stages:
+**Testing Ink TUI Components:**
+- React/Ink components are tested using `@jest/globals` and Ink's test rendering primitives to verify layout, color rendering, and keyboard event dispatch without requiring a real TTY.
 
-```typescript
-const model = new MockReviewModel();
-model.setRoleHandler('structural', () => Promise.resolve({
-  findings: [structuralFinding],
-  usage: { promptTokens: 50, completionTokens: 20, totalTokens: 70 },
-  model: 'mock-nemotron',
-  latencyMs: 5,
-  finishReason: 'stop',
-}));
-```
+## Mocking & Isolation
 
-### 3. Graceful Degradation Testing
-Tests explicitly verify that failures in individual reviewer stages (e.g., Semantic reviewer timeout or network error) degrade gracefully: surviving reviewer findings proceed to the Critic stage, and the failure is logged as a warning in `ReviewResult.metadata.warnings` rather than crashing the review process.
+**1. Mock AI Model Provider (`MockReviewModel`):**
+- Located in `src/review/__tests__/mocks.ts` and `src/application/__tests__/mocks.ts`.
+- Implements `ReviewModel` abstraction (`generate(request)`).
+- Allows test suites to configure deterministic findings, simulate slow inference, or inject schema corruption without making network requests to NVIDIA API.
 
-### 4. Real Tree-sitter WASM Grammars in Tests
-Parser tests load real WebAssembly grammars located in `test-wasm/` (`tree-sitter-typescript.wasm`, `tree-sitter-python.wasm`) rather than mocking AST outputs.
-
-### 5. Mocking Policy
-- **What is mocked:**
-  - NVIDIA API HTTP endpoints (via global `fetch` mocking or `MockReviewModel`)
-  - Subprocess execution (`spawnWithSignal`, `which`) for linters not guaranteed to exist on CI/dev machines
-  - Time/delays in race-condition tests
-- **What is NOT mocked:**
-  - Tree-sitter AST parser (runs real WASM in tests)
-  - ReferenceGraph & DependencyGraph traversal
-  - File system operations (uses real temp directories in `tmpdir`)
-  - Git operations (uses real local repositories created via `isomorphic-git.init`)
-  - Zod schema validation (runs real compiled schema validation)
+**2. Subprocess & Git Mocking:**
+- Subprocess tool executions (`tsc`, `biome`, `ruff`) are mocked in unit tests to test graceful degradation when tools are missing or return errors.
+- Real Git repositories are created dynamically inside temporary directories (`mkdtemp`) using isomorphic-git to test end-to-end Git operations safely.
 
 ---
 
-*Testing patterns analysis: 2026-09-11*
+*Testing analysis: 2026-09-14*
+*Maintained under GSD codebase documentation guidelines*

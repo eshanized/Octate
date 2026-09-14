@@ -1,117 +1,105 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-09-11
+**Analysis Date:** 2026-09-14
 
 ## Naming Patterns
 
-**Files:**
-- kebab-case for all source files: `review.ts`, `discovery.test.ts`, `symbol-index.ts`, `critic.ts`
-- Test files: `[name].test.ts` co-located with source
-- Index barrels: `index.ts` for public exports
-- Types: `types.ts` for domain models, `schema.ts` for Zod schemas
+**Files & Directories:**
+- `kebab-case.ts` for all standard TypeScript modules: `review.ts`, `symbol-index.ts`, `evidence-validator.ts`, `decision-gate.ts`.
+- `kebab-case.tsx` or `app.tsx` for React/Ink TUI components (`src/renderers/tui/app.tsx`).
+- Test files: `[name].test.ts` or `[name].test.tsx` co-located directly beside the source file under test.
+- Directory names: `kebab-case` (`application`, `renderers`, `analysis`, `intelligence`, `model`, `review`, `cancellation`).
+- Public package entry points: `index.ts` in each module directory exporting canonical APIs and types.
 
 **Functions:**
-- camelCase: `createReviewCommand`, `findGitRoot`, `loadConfig`, `filterDeterministicHardFloor`, `computeCompositeScore`
-- Async functions: no special prefix, use `async` keyword
-- Factory functions: `create*`, `make*` prefix: `createReviewEngine`, `createCancellationController`, `createCacheStore`, `createModelProvider`
+- `camelCase` for all functions and methods: `createReviewCommand`, `resolveScope`, `collectDiagnostics`, `evaluateReviewPolicy`.
+- Async functions: use standard `async` keyword without special prefix/suffix; return `Promise<T>`.
+- Factory functions: prefix with `create*` or `make*`: `createReviewUseCase`, `createReviewEngine`, `createCancellationController`, `createSymbolIndex`.
 
-**Variables:**
-- camelCase: `repoRoot`, `configPath`, `testDir`, `rawFindings`
-- Constants: UPPER_SNAKE_CASE: `DEFAULT_CONFIG`, `RANKING_WEIGHTS`, `SEVERITY_SCORES`
-- Private/internal: underscore prefix occasionally used but not enforced
+**Variables & Constants:**
+- Variables: `camelCase`: `repoRoot`, `changedFiles`, `rawFindings`, `maxFindings`.
+- Constants: `UPPER_SNAKE_CASE`: `DEFAULT_CONFIG`, `RANKING_WEIGHTS`, `ReviewExitCodes`, `SEVERITY_ORDER`.
+- Private fields / internals: standard camelCase, or `#private` fields where runtime encapsulation is needed.
 
-**Types/Interfaces:**
-- PascalCase: `ReviewOptions`, `ModelRequest`, `ReviewResult`, `RankedFinding`, `CriticVerdict`
-- Type guards: `is*` prefix: `isRepository`, `isOctateError`, `isReviewModel`, `isActionableFix`
-
-**Modules/Directories:**
-- kebab-case directories: `cancellation`, `repository`, `intelligence`, `model`, `review`
-- Barrel exports at `index.ts` in each directory
+**Types & Interfaces:**
+- Types and Interfaces: `PascalCase`: `ReviewResult`, `RankedFinding`, `FindingDisposition`, `ReviewScope`, `CanonicalReviewStage`.
+- Type Guards: prefix with `is*`: `isOctateError`, `isRepository`, `isReviewModel`, `isActionableFix`.
+- Enums / Const Objects: `PascalCase` object name with `UPPER_SNAKE_CASE` keys (`ReviewExitCodes.BLOCKING_FINDINGS`).
 
 ## Code Style & Tooling
 
 **Formatting (Biome):**
-- Indentation: 2 spaces
-- Line width: 100 characters
-- Semicolons: always
-- Trailing commas: ES5 (trailing where valid)
-- Quotes: single quotes
-- Organize imports: enabled (auto-sort)
+- Indentation: 2 spaces.
+- Line width: 100 characters max.
+- Semicolons: always required.
+- Quotes: single quotes for strings; double quotes in JSON.
+- Trailing commas: ES5 (trailing where syntactically valid in multiline collections).
+- Import organization: automatically sorted via Biome (`organizeImports: on`).
 
 **Linting (Biome):**
-- Recommended rules: enabled
-- Correctness: error level
-- Suspicious: error level (`useAwait` strictly enforced — avoid unnecessary `async` on functions returning Promises synchronously)
-- Style: warn level (avoid `!` non-null assertions; use explicit type narrowing or assertions)
-- `noProcessEnv`: off (CLI needs process.env)
-- `noExcessiveClassesPerFile`: off
-- `useNamingConvention`: warn (strictCase: false)
+- Recommended rules: enabled.
+- Correctness: error level (`noNodejsModules: off`, `noProcessGlobal: off` for CLI runtime).
+- Suspicious: error level (`useAwait` enforced — do not mark functions `async` unless they perform await operations).
+- Style: warn level (avoid `!` non-null assertions where explicit guards can be used; `noProcessEnv: off`).
 
-**TypeScript (tsconfig.json):**
-- Target: ES2022
-- Module: NodeNext
-- ModuleResolution: NodeNext
-- Strict: true
-- noUncheckedIndexedAccess: true
-- exactOptionalPropertyTypes: true
-- Declaration: true (generates .d.ts)
-- SourceMap: true
-- Path aliases: `@/*` → `./src/*`
+**TypeScript Configuration (`tsconfig.json`):**
+- Target: `ES2022`.
+- Module & Resolution: `NodeNext`.
+- Strict mode: `true` (including `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`).
+- Path Aliases: `@/*` mapped to `./src/*`.
+- Declarations: `.d.ts` and `.d.ts.map` generated on build.
 
 ## Error Handling & Exit Codes
 
-**Pattern: Typed Error Hierarchy**
-- Base class: `OctateError` (extends Error) with `exitCode` and `context`
-- Standard Exit Code Mapping:
-  - **0**: Review passed (no blocking findings)
-  - **1**: Review completed with blocking findings (e.g. Critical/High severity findings exceeding threshold)
-  - **2**: Usage or configuration error (`ConfigurationError`)
-  - **3**: Repository, Git, AST parsing, or analysis error (`RepositoryError`, `GitError`, `ParseError`, `AnalysisError`, `ContextError`)
-  - **4**: AI Model provider or network error (`ModelError`, `AuthenticationError`, `ProviderRateLimitError`, `ProviderTimeoutError`, `QuotaExceededError`)
-  - **5**: Schema validation or internal error (`ValidationError`, `InternalError`)
-- Type guards: `isOctateError`, `isConfigurationError`, `isModelError`, etc.
-- JSON serialization: `toJson()` method on base class.
+**Pattern: Typed Error Hierarchy:**
+- Base class: `OctateError` (`src/errors/index.ts`) extending native `Error` with `exitCode` and structured `context`.
+- Standardized Exit Codes (`src/application/types.ts:ReviewExitCodes`):
+  - **0** (`SUCCESS`): Review completed successfully with 0 blocking findings.
+  - **1** (`BLOCKING_FINDINGS`): Review found defects that meet or exceed `--fail-on` policy (evaluated by `src/application/policy.ts`).
+  - **2** (`CONFIG_ERROR`): Invalid CLI options, malformed `octate.yaml`, or unparseable configuration.
+  - **3** (`REPOSITORY_ERROR`): Git repository not found, dirty tree errors, AST parse failures, or analysis aborts.
+  - **4** (`MODEL_ERROR`): NVIDIA API authentication failure (`AuthenticationError`), rate limits, timeouts, or unrecoverable model payload errors.
+  - **5** (`INTERNAL_ERROR`): Schema validation errors or unhandled system faults.
+  - **130** (`CANCELLED`): User interrupted review via SIGINT / Ctrl+C.
 
-## Architecture & Security Patterns
+## Review Pipeline & Safety Conventions
 
-### 1. Prompt Architecture & Injection Defense
-- **Sandwich Prompt Framing:** Untrusted repository code, diffs, and comments are placed inside demarcated XML-like boundaries (`<diff>`, `<context_item>`) with explicit passive instruction tags.
-- System instructions and security guardrails precede untrusted content; final review instructions and output schema follow it. Repository source content NEVER appears in trusted prompt sections.
-- **Lightweight Template Engine:** Regex interpolation (`{{variable}}`, `{{#each list}}`) in `src/model/prompts/template.ts` avoids heavyweight template libraries and arbitrary code execution.
+### 1. Deterministic Evidence Verification (4 Tiers)
+All candidate model findings must be evaluated against deterministic ground truth (`src/review/evidence-validator.ts`):
+- **Tier 1 (Diagnostic):** Corroborated by a deterministic local compiler or linter diagnostic (`tsc`, `biome`, `ruff`, `mypy`).
+- **Tier 2 (Syntax / AST):** Directly backed by a Tree-sitter syntax check on modified lines.
+- **Tier 3 (Context):** Backed by cross-file reference graph or import resolution.
+- **Tier 4 (Unverified):** Pure model assertion without deterministic corroboration.
 
-### 2. Schema Validation & 2-Turn Repair
-- Model responses are untrusted text until validated against compiled Zod schemas (`src/model/schema/finding.ts`).
-- JSON extraction strips markdown fences (````json ... ````) and cleans trailing commas before parsing.
-- Grounding: Line ranges are strictly checked against actual file line counts (`src/model/schema/grounding.ts`). Phantom files are dropped and out-of-bounds line numbers clamped.
-- On schema failure, actionable Zod issues are formatted into a repair prompt and retried once before throwing `ModelError` (exit code 4).
+### 2. Deterministic Decision Gate & Disposition
+The `DeterministicDecisionGate` (`src/review/decision-gate.ts`) assigns an authoritative disposition to each finding:
+- `BLOCKING`: Real, high-severity bugs that meet blocking criteria (must have Tier 1 or Tier 2 evidence and `PATCH_LOCAL` attribution).
+- `ADVISORY`: High-value observations or context-level concerns that should not block pull request merging.
+- `DISMISSED`: Low-confidence, hallucinated, or ungrounded findings dropped before presentation.
 
-### 3. Review DAG Scheduling & Fault Isolation
-- Staged execution: Structural reviewer runs first as baseline. Semantic and Security reviewers trigger conditionally via AST heuristics and pattern matching.
-- **Bounded Concurrency:** Concurrency is strictly bounded (2 parallel model requests, 3 parallel subprocess diagnostic runs) via `PromisePool`.
-- **Graceful Degradation:** If an individual reviewer fails or times out, surviving reviewer findings proceed to the Critic stage, and the failure is recorded as a warning in `ReviewResult.metadata.warnings`.
+### 3. Patch Attribution
+Findings are strictly attributed to their origin (`src/review/attribution.ts`):
+- `PATCH_LOCAL`: Bug introduced directly inside the diff / added lines.
+- `CALLER_CALLEE`: Issue caused in unmodified code through a contract change in modified code.
+- `AMBIENT`: Pre-existing code issue unrelated to the developer's commit.
+- `SYSTEMIC`: Global architectural pattern issue.
+*Rule:* Only `PATCH_LOCAL` (and verified `CALLER_CALLEE`) findings can ever trigger a `BLOCKING` status.
 
-### 4. Two-Stage Critic Quality Gate
-- **Stage 1 (Deterministic Hard Floor):** Rejects invalid line numbers, nonexistent files, low-confidence candidates (`< 0.6`), empty evidence arrays, and non-actionable suggestions ("fix this", "refactor") without incurring model costs.
-- **Stage 2 (LLM Critic):** Invokes `critic.v1` to verify factual truth against repository evidence and apply senior-engineer judgment.
+### 4. Prompt Architecture & Injection Defense
+- **Sandwich Prompt Framing:** Untrusted diffs and repository files are encapsulated inside XML tags (`<diff>`, `<context_item>`).
+- Trusted prompt instructions and guardrails always precede and follow untrusted content. Repository source code never appears in trusted instruction blocks.
+- **Lightweight Template Engine:** Regex interpolation (`{{variable}}`, `{{#each list}}`) in `src/model/prompts/template.ts` avoids arbitrary code execution.
 
-### 5. Multi-Factor Deduplication & Evidence Merging
-- Findings are clustered using:
-  1. File and line range interval overlap ($\pm 3$ lines tolerance)
-  2. Enclosing symbol ID + category match
-  3. Root-cause keyword overlap (e.g. `['null', 'dereference']`)
-- Merging selects the highest severity, highest confidence, strongest explanatory message, and unions up to 5 verified evidence items.
-- Runs in two phases: pre-Critic syntactic clustering (to minimize prompt token expenditure) and post-Critic consolidation.
+### 5. Schema Validation & 2-Turn Repair Loop
+- Model outputs are untrusted until parsed and validated against compiled Zod schemas (`src/model/schema/finding.ts`).
+- JSON extractor removes markdown code fences and cleans trailing commas.
+- File paths are verified against repository files, and line numbers are clamped to actual file lengths (`src/model/schema/grounding.ts`).
+- On schema validation failure, actionable Zod error messages are formatted into a repair prompt and retried once before failing.
 
-### 6. Composite Ranking & Critical Protection
-- Normalized 0–100 composite ranking:
-  - Severity: 30%
-  - Confidence: 20%
-  - Evidence Strength: 15%
-  - Blast Radius: 15% (computed via `ReferenceGraph.getIncoming` caller/dependency count)
-  - Security Impact: 10%
-  - Regression Probability: 10%
-- Findings below `minSeverity` are discarded. The top `maxFindings` are preserved, but **Critical-severity findings are never truncated**.
+### 6. Fast-Path Skipping for Low-Risk Diffs
+- If all modified files are markdown documentation (`.md`) or test suites (`.test.ts`, `test/`), the Review DAG fast-paths past heavy LLM reviewers to save inference costs and avoid false positives on doc changes.
 
 ---
 
-*Convention analysis: 2026-09-11*
+*Conventions analysis: 2026-09-14*
+*Maintained under GSD codebase documentation guidelines*
