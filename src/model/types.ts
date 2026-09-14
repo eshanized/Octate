@@ -18,7 +18,12 @@ export interface ModelEvidence {
   endLine: number;
   relationship: string;
   explanation: string;
-  tier?: 'direct_changed' | 'indirect_context' | 'baseline_context' | 'supporting_context' | undefined;
+  tier?:
+    | 'direct_changed'
+    | 'indirect_context'
+    | 'baseline_context'
+    | 'supporting_context'
+    | undefined;
   causalLink?: string | undefined;
 }
 

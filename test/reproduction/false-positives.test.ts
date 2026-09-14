@@ -207,7 +207,9 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
       // But if a finding is legitimately assigned blocking disposition, it blocks:
       const blockingFinding = { ...finding, finalDisposition: 'blocking' as const };
       expect(isBlockingFinding(blockingFinding, 'critical')).toBe(true);
-      expect(evaluateExitCode({ ...reviewResult, findings: [blockingFinding] }, 'critical')).toBe(1);
+      expect(evaluateExitCode({ ...reviewResult, findings: [blockingFinding] }, 'critical')).toBe(
+        1
+      );
     });
 
     it('demonstrates that critical-protected truncation unconditionally preserves the finding', () => {

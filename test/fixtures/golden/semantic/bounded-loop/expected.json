@@ -1,0 +1,14 @@
+{
+  "id": "sem-bounded-loop",
+  "category": "semantic",
+  "expectedSeverity": "info",
+  "targetFile": "src/utils/processor.ts",
+  "lineRange": {
+    "start": 2,
+    "end": 6
+  },
+  "minConfidence": 0.8,
+  "negativeVariantFile": "clean.ts",
+  "expectedNegativeFindings": 0,
+  "hasDefect": false
+}

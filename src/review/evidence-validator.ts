@@ -216,7 +216,9 @@ export function isGeneratedOrLockPath(filePath: string): boolean {
  */
 export function isCommonIgnoredPath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
-  return COMMON_IGNORED_DIRS.some((dir) => normalized.startsWith(dir) || normalized.includes(`/${dir}`));
+  return COMMON_IGNORED_DIRS.some(
+    (dir) => normalized.startsWith(dir) || normalized.includes(`/${dir}`)
+  );
 }
 
 /**
@@ -646,7 +648,9 @@ export async function validateEvidenceItem(
 
   // 9. Sanitize explanation and causal link
   const sanitizedExplanation = sanitizeSecretTokens(evidence.explanation ?? '');
-  const sanitizedCausalLink = evidence.causalLink ? sanitizeSecretTokens(evidence.causalLink) : undefined;
+  const sanitizedCausalLink = evidence.causalLink
+    ? sanitizeSecretTokens(evidence.causalLink)
+    : undefined;
 
   const validatedEvidence: ModelEvidence = {
     ...evidence,
@@ -740,14 +744,19 @@ export async function validateFindingEvidence(
     diffInfo.changedFiles.has(normFindingFile) ||
     (options.changedFiles &&
       options.changedFiles.some(
-        (cf) => path.normalize(cf) === normFindingFile || normFindingFile.endsWith(path.normalize(cf))
+        (cf) =>
+          path.normalize(cf) === normFindingFile || normFindingFile.endsWith(path.normalize(cf))
       ));
   const diffMeta = diffInfo.files.get(normFindingFile);
   if (isPrimaryChanged) {
     if (
       !diffMeta ||
       diffMeta.addedModifiedLines.length === 0 ||
-      intervalsOverlap(finding.startLine, finding.endLine ?? finding.startLine, diffMeta.addedModifiedLines)
+      intervalsOverlap(
+        finding.startLine,
+        finding.endLine ?? finding.startLine,
+        diffMeta.addedModifiedLines
+      )
     ) {
       primaryInDiff = true;
     }

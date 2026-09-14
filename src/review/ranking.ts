@@ -325,7 +325,8 @@ export function rankAndTruncateFindings(params: RankingParams): RankedFinding[] 
       introducedByPatch: f.introducedByPatch ?? 'unknown',
       criticDecision: f.criticDecision ?? 'uncertain',
       criticReason: f.criticReason,
-      provenance: (f as { provenance?: import('./types.js').ReviewerProvenance[] }).provenance ?? [],
+      provenance:
+        (f as { provenance?: import('./types.js').ReviewerProvenance[] }).provenance ?? [],
       contradictions: f.contradictions ?? [],
       compositeScore,
       scoreBreakdown,

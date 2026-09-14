@@ -89,17 +89,17 @@ async function main() {
     );
   } else {
     console.log(
-      pc.bold(
-        pc.bgRed(pc.white('  HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE  '))
-      )
+      pc.bold(pc.bgRed(pc.white('  HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE  ')))
     );
     console.log(pc.bold(pc.magenta('\n  MODE: HARNESS INTEGRITY TEST (Mock Models)')));
-    console.log(pc.dim('  Verifying testbed wiring, schemas, diff generation, and semantic matching logic.\n'));
+    console.log(
+      pc.dim('  Verifying testbed wiring, schemas, diff generation, and semantic matching logic.\n')
+    );
     console.log(
       pc.yellow(
         '  [CRITICAL NOTICE] Mock mode results verify harness integrity ONLY.\n' +
-        '  MockReviewModel is pre-programmed to emit synthetic findings to assert test plumbing.\n' +
-        '  These numbers MUST NOT be cited or published as evidence of AI review quality.\n'
+          '  MockReviewModel is pre-programmed to emit synthetic findings to assert test plumbing.\n' +
+          '  These numbers MUST NOT be cited or published as evidence of AI review quality.\n'
       )
     );
   }
@@ -127,15 +127,20 @@ async function main() {
     const tokenText = `${res.totalTokens} tokens (p: ${res.promptTokens}, c: ${res.completionTokens})`;
     const reqText = `Reqs: ${res.requestCount} | Failures: ${res.apiFailures} | Timeouts: ${res.timeoutCount}`;
 
-    const reviewersSummary = Object.entries(res.byReviewer)
-      .map(([rev, count]) => `${rev}: ${count}`)
-      .join(', ') || 'none';
+    const reviewersSummary =
+      Object.entries(res.byReviewer)
+        .map(([rev, count]) => `${rev}: ${count}`)
+        .join(', ') || 'none';
 
     console.log(`${statusIcon} ${pc.bold(res.fixtureName)} [${res.language}] (${res.category})`);
     console.log(`     ${tpText} | ${fpText} | ${precText} | ${recText} | ${fprText}`);
-    console.log(`     Reviewers: [${reviewersSummary}] | Critic Retained: ${res.criticRetainedCount}`);
+    console.log(
+      `     Reviewers: [${reviewersSummary}] | Critic Retained: ${res.criticRetainedCount}`
+    );
     console.log(`     Latency: ${pc.cyan(timingText)} | Tokens: ${pc.cyan(tokenText)}`);
-    console.log(`     Diff Scope: vuln: +${res.vulnerableDiffLines} lines, clean: +${res.cleanDiffLines} lines | ${reqText}`);
+    console.log(
+      `     Diff Scope: vuln: +${res.vulnerableDiffLines} lines, clean: +${res.cleanDiffLines} lines | ${reqText}`
+    );
 
     if (res.cleanFindings.length > 0) {
       console.log(pc.yellow('     Clean Findings (False Positives):'));
@@ -165,9 +170,7 @@ async function main() {
       `  • Evaluation Mode         : ${pc.bold(pc.bgRed(pc.white(' HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE ')))}`
     );
   } else {
-    console.log(
-      `  • Evaluation Mode         : ${pc.bold(pc.green('LIVE PIPELINE EVALUATION'))}`
-    );
+    console.log(`  • Evaluation Mode         : ${pc.bold(pc.green('LIVE PIPELINE EVALUATION'))}`);
   }
   console.log(`  • Provider                : ${pc.cyan(scorecard.provider)}`);
   console.log(`  • Model Used              : ${pc.cyan(scorecard.modelName)}`);
@@ -343,12 +346,13 @@ ${
 | Fixture | Language | Category | Detected (TP) | False Positives | Reviewer Counts | Critic Retained | Latency | Tokens | Diff Lines (V / C) | Passed |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 ${scorecard.results
-  .map(
-    (r) => {
-      const revSummary = Object.entries(r.byReviewer).map(([k, v]) => `${k}:${v}`).join(' ') || 'fast-path';
-      return `| \`${r.fixtureName}\` | ${r.language} | ${r.category} | ${r.detectedExpected ? `✅ Yes (${r.truePositives})` : `❌ No (FN: ${r.falseNegatives})`} | ${r.falsePositives === 0 ? '0 (Clean)' : `❌ ${r.falsePositives}`} | ${revSummary} | ${r.criticRetainedCount} | ${r.latencyMs}ms | ${r.totalTokens} | +${r.vulnerableDiffLines} / +${r.cleanDiffLines} | ${r.passed ? '✅' : '❌'} |`;
-    }
-  )
+  .map((r) => {
+    const revSummary =
+      Object.entries(r.byReviewer)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(' ') || 'fast-path';
+    return `| \`${r.fixtureName}\` | ${r.language} | ${r.category} | ${r.detectedExpected ? `✅ Yes (${r.truePositives})` : `❌ No (FN: ${r.falseNegatives})`} | ${r.falsePositives === 0 ? '0 (Clean)' : `❌ ${r.falsePositives}`} | ${revSummary} | ${r.criticRetainedCount} | ${r.latencyMs}ms | ${r.totalTokens} | +${r.vulnerableDiffLines} / +${r.cleanDiffLines} | ${r.passed ? '✅' : '❌'} |`;
+  })
   .join('\n')}
 
 ---

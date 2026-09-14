@@ -226,7 +226,8 @@ export const FINDINGS_OUTPUT_SCHEMA = JSON.stringify(
             modelSuggestedDisposition: {
               type: 'string',
               enum: ['blocking', 'advisory', 'informational', 'rejected'],
-              description: 'Suggested workflow disposition (subject to deterministic gate verification)',
+              description:
+                'Suggested workflow disposition (subject to deterministic gate verification)',
             },
           },
           required: ['severity', 'category', 'title', 'message', 'file', 'startLine', 'endLine'],

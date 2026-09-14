@@ -24,7 +24,11 @@ export interface AttributionOptions {
 /**
  * Checks whether a line range overlaps with any line intervals.
  */
-function rangesOverlap(start: number, end: number, intervals: Array<{ start: number; end: number }>): boolean {
+function rangesOverlap(
+  start: number,
+  end: number,
+  intervals: Array<{ start: number; end: number }>
+): boolean {
   for (const range of intervals) {
     if (start <= range.end + 1 && end >= range.start - 1) {
       return true;
@@ -59,14 +63,16 @@ export function determinePatchAttribution(
     diffInfo.changedFiles.has(normFindingFile) ||
     (options.changedFiles &&
       options.changedFiles.some(
-        (cf) => path.normalize(cf) === normFindingFile || normFindingFile.endsWith(path.normalize(cf))
+        (cf) =>
+          path.normalize(cf) === normFindingFile || normFindingFile.endsWith(path.normalize(cf))
       ));
 
   if (!isChangedFile) {
     // Finding is in an unchanged file
     // Check if there is a documented causal link connecting it to changed code
     const hasCausalConnection = finding.evidence?.some(
-      (e) => Boolean(e.causalLink && e.causalLink.trim().length > 0) || e.tier === 'supporting_context'
+      (e) =>
+        Boolean(e.causalLink && e.causalLink.trim().length > 0) || e.tier === 'supporting_context'
     );
 
     if (hasCausalConnection) {
@@ -88,7 +94,11 @@ export function determinePatchAttribution(
       finding.message.toLowerCase().includes('deleted') ||
       finding.introducedByPatch === 'fixed_by_patch';
 
-    if (isFixClaim && diffMeta.deletedLines.length > 0 && rangesOverlap(start, end, diffMeta.deletedLines)) {
+    if (
+      isFixClaim &&
+      diffMeta.deletedLines.length > 0 &&
+      rangesOverlap(start, end, diffMeta.deletedLines)
+    ) {
       return 'fixed_by_patch';
     }
 
@@ -119,8 +129,8 @@ export function determinePatchAttribution(
 
       // Lines are in a modified file, but outside the modified hunks
       // Check if evidence links this to the modified hunks
-      const hasCausalLink = finding.evidence?.some(
-        (e) => Boolean(e.causalLink && e.causalLink.trim().length > 0)
+      const hasCausalLink = finding.evidence?.some((e) =>
+        Boolean(e.causalLink && e.causalLink.trim().length > 0)
       );
 
       if (hasCausalLink) {

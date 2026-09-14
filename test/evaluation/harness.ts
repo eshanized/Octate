@@ -3,26 +3,32 @@
  * Explicitly separates Mock Harness Integrity verification from Live Pipeline Evaluation.
  */
 
-import { promises as fs } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import * as git from "isomorphic-git";
-import { ReviewUseCase } from "../../src/application/review.js";
-import { AuthenticationError } from "../../src/errors/index.js";
-import { createLogger } from "../../src/logging/index.js";
-import { LocalNvidiaProvider } from "../../src/model/index.js";
-import type { ModelFinding, ModelRequest, ModelResponse, ModelUsage, ReviewModel } from "../../src/model/types.js";
-import { createTestFinding, MockReviewModel } from "../../src/review/__tests__/mocks.js";
-import type { RankedFinding, ReviewResult, ReviewSeverity } from "../../src/review/types.js";
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import * as git from 'isomorphic-git';
+import { ReviewUseCase } from '../../src/application/review.js';
+import { AuthenticationError } from '../../src/errors/index.js';
+import { createLogger } from '../../src/logging/index.js';
+import { LocalNvidiaProvider } from '../../src/model/index.js';
+import type {
+  ModelFinding,
+  ModelRequest,
+  ModelResponse,
+  ModelUsage,
+  ReviewModel,
+} from '../../src/model/types.js';
+import { createTestFinding, MockReviewModel } from '../../src/review/__tests__/mocks.js';
+import type { RankedFinding, ReviewResult, ReviewSeverity } from '../../src/review/types.js';
 import type {
   EvaluationMode,
   EvaluationResult,
   EvaluationScorecard,
   ExpectedFinding,
   GoldenFixture,
-} from "./types.js";
+} from './types.js';
 
-const logger = createLogger("evaluation:harness");
+const logger = createLogger('evaluation:harness');
 
 const SEVERITY_RANKS: Record<ReviewSeverity, number> = {
   critical: 5,
@@ -39,8 +45,11 @@ const SEVERITY_RANKS: Record<ReviewSeverity, number> = {
  */
 export function matchesExpected(finding: RankedFinding, expected: ExpectedFinding): boolean {
   // 1. Exact normalized file path match
-  const normFindingFile = path.normalize(finding.file).replace(/\\/g, "/").replace(/^\.\//, "");
-  const normExpectedFile = path.normalize(expected.targetFile).replace(/\\/g, "/").replace(/^\.\//, "");
+  const normFindingFile = path.normalize(finding.file).replace(/\\/g, '/').replace(/^\.\//, '');
+  const normExpectedFile = path
+    .normalize(expected.targetFile)
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '');
   if (normFindingFile !== normExpectedFile) {
     return false;
   }
@@ -75,9 +84,10 @@ export function matchesExpected(finding: RankedFinding, expected: ExpectedFindin
   }
 
   // 6. Semantic defect keyword verification
-  const keywords = expected.defectKeywords ?? (expected.titleContains ? [expected.titleContains] : []);
+  const keywords =
+    expected.defectKeywords ?? (expected.titleContains ? [expected.titleContains] : []);
   if (keywords.length > 0) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text = (finding.title + ' ' + finding.message).toLowerCase();
     const matchesKeyword = keywords.some((kw) => text.includes(kw.toLowerCase()));
     if (!matchesKeyword) {
       return false;
@@ -118,7 +128,7 @@ export class TelemetryTrackingModel implements ReviewModel {
     try {
       const resp = await this.inner.generate(request, signal);
       this.reviewerCalls.push({
-        role: request.reviewTask ?? "unknown",
+        role: request.reviewTask ?? 'unknown',
         findings: resp.findings,
         durationMs: Date.now() - start,
         tokens: resp.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
@@ -128,7 +138,7 @@ export class TelemetryTrackingModel implements ReviewModel {
       this.apiFailures++;
       if (
         err instanceof Error &&
-        (err.name === "ProviderTimeoutError" || err.message.toLowerCase().includes("timeout"))
+        (err.name === 'ProviderTimeoutError' || err.message.toLowerCase().includes('timeout'))
       ) {
         this.timeoutCount++;
       }
@@ -143,10 +153,10 @@ export class TelemetryTrackingModel implements ReviewModel {
 export function calculateScorecard(
   results: EvaluationResult[],
   latencyMs: number,
-  mode: EvaluationMode = "harness_mock",
-  provider = "nvidia",
-  modelName = "mock-nemotron",
-  endpoint = "https://integrate.api.nvidia.com/v1/chat/completions",
+  mode: EvaluationMode = 'harness_mock',
+  provider = 'nvidia',
+  modelName = 'mock-nemotron',
+  endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions',
   totalRequests = 0,
   timeoutCount = 0
 ): EvaluationScorecard {
@@ -180,13 +190,13 @@ export function calculateScorecard(
   const recallDenominator = truePositives + falseNegatives;
   const recall = recallDenominator > 0 ? truePositives / recallDenominator : 1.0;
 
-  const isMock = mode === "harness_mock";
+  const isMock = mode === 'harness_mock';
   const modeLabel = isMock
-    ? "HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE"
+    ? 'HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE'
     : `LIVE PIPELINE EVALUATION (${provider}: ${modelName})`;
 
   const disclaimer = isMock
-    ? "HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE. MockReviewModel is pre-programmed to emit synthetic findings to assert harness plumbing and matcher correctness. These results do NOT reflect real model detection capabilities."
+    ? 'HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE. MockReviewModel is pre-programmed to emit synthetic findings to assert harness plumbing and matcher correctness. These results do NOT reflect real model detection capabilities.'
     : undefined;
 
   const passed = isMock
@@ -225,10 +235,10 @@ export function calculateScorecard(
  * Loads golden fixtures from the test fixtures directory.
  */
 export async function loadGoldenFixtures(baseDir?: string): Promise<GoldenFixture[]> {
-  const root = baseDir ?? path.resolve(process.cwd(), "test/fixtures/golden");
+  const root = baseDir ?? path.resolve(process.cwd(), 'test/fixtures/golden');
   const fixtures: GoldenFixture[] = [];
 
-  const categories = ["security", "structural", "semantic", "refactor", "docs", "test"];
+  const categories = ['security', 'structural', 'semantic', 'refactor', 'docs', 'test'];
 
   for (const cat of categories) {
     const catPath = path.join(root, cat);
@@ -240,29 +250,29 @@ export async function loadGoldenFixtures(baseDir?: string): Promise<GoldenFixtur
         if (!stat.isDirectory()) continue;
 
         const files = await fs.readdir(fixtureDir);
-        const expectedFile = files.find((f) => f === "expected.json");
+        const expectedFile = files.find((f) => f === 'expected.json');
         if (!expectedFile) continue;
 
-        const expectedRaw = await fs.readFile(path.join(fixtureDir, expectedFile), "utf-8");
+        const expectedRaw = await fs.readFile(path.join(fixtureDir, expectedFile), 'utf-8');
         const expected: ExpectedFinding = JSON.parse(expectedRaw);
 
-        const vulnFile = files.find((f) => f.startsWith("vulnerable."));
-        const cleanFile = files.find((f) => f.startsWith("clean."));
-        const baseFile = files.find((f) => f.startsWith("baseline."));
+        const vulnFile = files.find((f) => f.startsWith('vulnerable.'));
+        const cleanFile = files.find((f) => f.startsWith('clean.'));
+        const baseFile = files.find((f) => f.startsWith('baseline.'));
 
         if (!vulnFile || !cleanFile) continue;
 
-        const vulnContent = await fs.readFile(path.join(fixtureDir, vulnFile), "utf-8");
-        const cleanContent = await fs.readFile(path.join(fixtureDir, cleanFile), "utf-8");
+        const vulnContent = await fs.readFile(path.join(fixtureDir, vulnFile), 'utf-8');
+        const cleanContent = await fs.readFile(path.join(fixtureDir, cleanFile), 'utf-8');
         const baseContent = baseFile
-          ? await fs.readFile(path.join(fixtureDir, baseFile), "utf-8")
+          ? await fs.readFile(path.join(fixtureDir, baseFile), 'utf-8')
           : undefined;
 
-        const language: "typescript" | "python" | "markdown" | "other" = vulnFile.endsWith(".py")
-          ? "python"
-          : vulnFile.endsWith(".md")
-            ? "markdown"
-            : "typescript";
+        const language: 'typescript' | 'python' | 'markdown' | 'other' = vulnFile.endsWith('.py')
+          ? 'python'
+          : vulnFile.endsWith('.md')
+            ? 'markdown'
+            : 'typescript';
 
         fixtures.push({
           name: `${cat}/${sub}`,
@@ -274,8 +284,8 @@ export async function loadGoldenFixtures(baseDir?: string): Promise<GoldenFixtur
           vulnerableContent: vulnContent,
           cleanFile,
           cleanContent: cleanContent,
-          diff: "",
-          cleanDiff: "",
+          diff: '',
+          cleanDiff: '',
           expected,
         });
       }
@@ -312,8 +322,8 @@ export function createMockModelForFixture(fixture: GoldenFixture, isClean: boole
         file: exp.targetFile,
         startLine: exp.lineRange.start,
         endLine: exp.lineRange.end,
-        relationship: "caller",
-        explanation: "Ground truth defect location",
+        relationship: 'caller',
+        explanation: 'Ground truth defect location',
       },
     ],
   });
@@ -321,15 +331,15 @@ export function createMockModelForFixture(fixture: GoldenFixture, isClean: boole
   const responseHandler = async () => ({
     findings: [finding],
     usage: { promptTokens: 120, completionTokens: 60, totalTokens: 180 },
-    model: "mock-nemotron",
+    model: 'mock-nemotron',
     latencyMs: 15,
-    finishReason: "stop" as const,
+    finishReason: 'stop' as const,
   });
 
-  model.setRoleHandler("security", responseHandler);
-  model.setRoleHandler("structural", responseHandler);
-  model.setRoleHandler("semantic", responseHandler);
-  model.setRoleHandler("critic", responseHandler);
+  model.setRoleHandler('security', responseHandler);
+  model.setRoleHandler('structural', responseHandler);
+  model.setRoleHandler('semantic', responseHandler);
+  model.setRoleHandler('critic', responseHandler);
 
   return model;
 }
@@ -350,17 +360,17 @@ export async function runEvaluationHarness(
   options?: RunEvaluationOptions
 ): Promise<EvaluationScorecard> {
   const isLive = Boolean(options?.live);
-  const mode: EvaluationMode = isLive ? "live_pipeline" : "harness_mock";
+  const mode: EvaluationMode = isLive ? 'live_pipeline' : 'harness_mock';
 
   let liveProvider: LocalNvidiaProvider | null = null;
-  let providerName = "mock";
-  let modelName = "mock-nemotron";
-  let endpointUrl = "mock://local";
+  let providerName = 'mock';
+  let modelName = 'mock-nemotron';
+  let endpointUrl = 'mock://local';
 
   if (isLive) {
-    if (options?.modelOverride && options.modelOverride.constructor.name === "MockReviewModel") {
+    if (options?.modelOverride && options.modelOverride.constructor.name === 'MockReviewModel') {
       throw new Error(
-        "Live evaluation invariant violated: MockReviewModel detected in live evaluation mode! Silent fallback to mocks is strictly prohibited."
+        'Live evaluation invariant violated: MockReviewModel detected in live evaluation mode! Silent fallback to mocks is strictly prohibited.'
       );
     }
 
@@ -373,15 +383,15 @@ export async function runEvaluationHarness(
     }
 
     const key = process.env.NVIDIA_API_KEY;
-    if (!key || typeof key !== "string" || key.trim().length === 0) {
+    if (!key || typeof key !== 'string' || key.trim().length === 0) {
       throw new AuthenticationError(
-        "Live evaluation requested (--live), but NVIDIA_API_KEY environment variable is not set. Silent fallback to mocks is strictly prohibited."
+        'Live evaluation requested (--live), but NVIDIA_API_KEY environment variable is not set. Silent fallback to mocks is strictly prohibited.'
       );
     }
 
     if (options?.modelOverride) {
       if (
-        options.modelOverride.constructor.name !== "LocalNvidiaProvider" &&
+        options.modelOverride.constructor.name !== 'LocalNvidiaProvider' &&
         !(options.modelOverride instanceof LocalNvidiaProvider)
       ) {
         throw new Error(
@@ -396,9 +406,10 @@ export async function runEvaluationHarness(
       });
     }
 
-    providerName = "nvidia";
-    modelName = liveProvider.modelId ?? "nvidia/nemotron-3-ultra-550b-a55b";
-    endpointUrl = liveProvider.endpointUrl ?? "https://integrate.api.nvidia.com/v1/chat/completions";
+    providerName = 'nvidia';
+    modelName = liveProvider.modelId ?? 'nvidia/nemotron-3-ultra-550b-a55b';
+    endpointUrl =
+      liveProvider.endpointUrl ?? 'https://integrate.api.nvidia.com/v1/chat/completions';
   }
 
   const startTime = Date.now();
@@ -409,8 +420,14 @@ export async function runEvaluationHarness(
 
   const results: EvaluationResult[] = [];
   logger.info(
-    { fixtureCount: fixtures.length, mode, provider: providerName, modelName, endpoint: endpointUrl },
-    "Starting golden review evaluation"
+    {
+      fixtureCount: fixtures.length,
+      mode,
+      provider: providerName,
+      modelName,
+      endpoint: endpointUrl,
+    },
+    'Starting golden review evaluation'
   );
 
   let aggregateRequests = 0;
@@ -448,9 +465,9 @@ export async function runEvaluationHarness(
       },
       findings: [],
       metadata: {
-        scopeType: "working-tree",
+        scopeType: 'working-tree',
         timestamp: new Date().toISOString(),
-        version: "0.1.0",
+        version: '0.1.0',
         model: modelName,
         totalTokens: 0,
         promptTokens: 0,
@@ -473,25 +490,25 @@ export async function runEvaluationHarness(
     const setupRepoWithBaseline = async (): Promise<{ dir: string; targetFilePath: string }> => {
       const dir = await fs.mkdtemp(path.join(tmpdir(), `octate-eval-${fixture.category}-`));
       await git.init({ fs, dir });
-      await git.setConfig({ fs, dir, path: "user.name", value: "Evaluation Harness" });
-      await git.setConfig({ fs, dir, path: "user.email", value: "eval@octate.dev" });
+      await git.setConfig({ fs, dir, path: 'user.name', value: 'Evaluation Harness' });
+      await git.setConfig({ fs, dir, path: 'user.email', value: 'eval@octate.dev' });
 
       const targetFilePath = path.join(dir, fixture.expected.targetFile);
       await fs.mkdir(path.dirname(targetFilePath), { recursive: true });
 
       const baseContent =
         fixture.baselineContent ??
-        (fixture.language === "python"
-          ? "# Baseline module\n"
-          : fixture.language === "markdown"
-            ? "# Documentation Baseline\n"
-            : "// Baseline module\nexport {};\n");
+        (fixture.language === 'python'
+          ? '# Baseline module\n'
+          : fixture.language === 'markdown'
+            ? '# Documentation Baseline\n'
+            : '// Baseline module\nexport {};\n');
 
-      await fs.writeFile(targetFilePath, baseContent, "utf-8");
-      await fs.writeFile(path.join(dir, "README.md"), `# Repo for ${fixture.name}\n`, "utf-8");
-      await git.add({ fs, dir, filepath: "README.md" });
+      await fs.writeFile(targetFilePath, baseContent, 'utf-8');
+      await fs.writeFile(path.join(dir, 'README.md'), `# Repo for ${fixture.name}\n`, 'utf-8');
+      await git.add({ fs, dir, filepath: 'README.md' });
       await git.add({ fs, dir, filepath: fixture.expected.targetFile });
-      await git.commit({ fs, dir, message: "Clean baseline commit" });
+      await git.commit({ fs, dir, message: 'Clean baseline commit' });
 
       return { dir, targetFilePath };
     };
@@ -499,7 +516,7 @@ export async function runEvaluationHarness(
     // 1. Evaluate Vulnerable Variant with Real Git Diff
     const vulnRepo = await setupRepoWithBaseline();
     try {
-      await fs.writeFile(vulnRepo.targetFilePath, fixture.vulnerableContent, "utf-8");
+      await fs.writeFile(vulnRepo.targetFilePath, fixture.vulnerableContent, 'utf-8');
 
       // Verify and record non-empty git diff (Task 6)
       const statusMatrix = await git.statusMatrix({ fs, dir: vulnRepo.dir });
@@ -511,8 +528,8 @@ export async function runEvaluationHarness(
         );
       }
 
-      const vulnLines = fixture.vulnerableContent.split("\n").length;
-      const baseLines = (fixture.baselineContent ?? "").split("\n").length;
+      const vulnLines = fixture.vulnerableContent.split('\n').length;
+      const baseLines = (fixture.baselineContent ?? '').split('\n').length;
       vulnDiffLines = Math.abs(vulnLines - baseLines) + 1;
 
       const baseModel = isLive ? liveProvider! : createMockModelForFixture(fixture, false);
@@ -523,12 +540,12 @@ export async function runEvaluationHarness(
       try {
         vulnResult = await useCase.execute({
           repoRoot: vulnRepo.dir,
-          scopeOptions: { type: "working-tree", repoRoot: vulnRepo.dir },
+          scopeOptions: { type: 'working-tree', repoRoot: vulnRepo.dir },
           modelOverride: trackingModel,
         });
       } catch (err) {
         apiFailures++;
-        logger.error({ fixture: fixture.name, error: err }, "Vulnerable review execution failed");
+        logger.error({ fixture: fixture.name, error: err }, 'Vulnerable review execution failed');
       }
       vulnLatencyMs = Date.now() - vulnStart;
 
@@ -543,20 +560,22 @@ export async function runEvaluationHarness(
         byReviewer[rev] = (byReviewer[rev] ?? 0) + cnt;
       }
       for (const call of trackingModel.reviewerCalls) {
-        const role = call.role.includes("structural")
-          ? "structural"
-          : call.role.includes("semantic")
-            ? "semantic"
-            : call.role.includes("security")
-              ? "security"
-              : "critic";
+        const role = call.role.includes('structural')
+          ? 'structural'
+          : call.role.includes('semantic')
+            ? 'semantic'
+            : call.role.includes('security')
+              ? 'security'
+              : 'critic';
         const findingsList = call.findings.map((f, idx) => ({
           ...f,
           id: `finding-${role}-${idx}`,
           finalRank: idx + 1,
-          status: "open" as const,
+          status: 'open' as const,
         }));
-        reviewerSpecificFindings[role] = (reviewerSpecificFindings[role] ?? []).concat(findingsList);
+        reviewerSpecificFindings[role] = (reviewerSpecificFindings[role] ?? []).concat(
+          findingsList
+        );
       }
     } finally {
       await fs.rm(vulnRepo.dir, { recursive: true, force: true });
@@ -565,7 +584,7 @@ export async function runEvaluationHarness(
     // 2. Evaluate Clean Variant with Real Git Diff
     const cleanRepo = await setupRepoWithBaseline();
     try {
-      await fs.writeFile(cleanRepo.targetFilePath, fixture.cleanContent, "utf-8");
+      await fs.writeFile(cleanRepo.targetFilePath, fixture.cleanContent, 'utf-8');
 
       // Verify and record non-empty git diff (Task 6)
       const statusMatrix = await git.statusMatrix({ fs, dir: cleanRepo.dir });
@@ -577,8 +596,8 @@ export async function runEvaluationHarness(
         );
       }
 
-      const cleanLines = fixture.cleanContent.split("\n").length;
-      const baseLines = (fixture.baselineContent ?? "").split("\n").length;
+      const cleanLines = fixture.cleanContent.split('\n').length;
+      const baseLines = (fixture.baselineContent ?? '').split('\n').length;
       cleanDiffLines = Math.abs(cleanLines - baseLines) + 1;
 
       const baseModel = isLive ? liveProvider! : createMockModelForFixture(fixture, true);
@@ -589,12 +608,12 @@ export async function runEvaluationHarness(
       try {
         cleanResult = await useCase.execute({
           repoRoot: cleanRepo.dir,
-          scopeOptions: { type: "working-tree", repoRoot: cleanRepo.dir },
+          scopeOptions: { type: 'working-tree', repoRoot: cleanRepo.dir },
           modelOverride: trackingModel,
         });
       } catch (err) {
         apiFailures++;
-        logger.error({ fixture: fixture.name, error: err }, "Clean review execution failed");
+        logger.error({ fixture: fixture.name, error: err }, 'Clean review execution failed');
       }
       cleanLatencyMs = Date.now() - cleanStart;
 
@@ -656,7 +675,8 @@ export async function runEvaluationHarness(
           falsePositives === 0
         : falsePositives === 0);
 
-    const criticRetainedCount = vulnResult.metadata?.postCriticFindingCount ?? vulnResult.findings.length;
+    const criticRetainedCount =
+      vulnResult.metadata?.postCriticFindingCount ?? vulnResult.findings.length;
 
     results.push({
       fixtureName: fixture.name,

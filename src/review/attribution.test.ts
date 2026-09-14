@@ -138,7 +138,9 @@ deleted file mode 100644
     const preExisting = makeFinding({ file: 'src/db/users.ts', startLine: 80, endLine: 85 });
     const unrelated = makeFinding({ file: 'src/config/app.ts', startLine: 1, endLine: 5 });
 
-    const attributed = attributeAllFindings([introduced, preExisting, unrelated], { diff: sampleDiff });
+    const attributed = attributeAllFindings([introduced, preExisting, unrelated], {
+      diff: sampleDiff,
+    });
     expect(attributed[0]?.introducedByPatch).toBe('introduced_by_patch');
     expect(attributed[1]?.introducedByPatch).toBe('pre_existing');
     expect(attributed[2]?.introducedByPatch).toBe('unrelated_to_patch');

@@ -58,7 +58,8 @@ describe('Evidence Validator', () => {
     });
 
     it('redacts Bearer tokens and passwords', () => {
-      const input = 'Authorization: Bearer secret_jwt_token_12345; password="mySuperSecretPassword!"';
+      const input =
+        'Authorization: Bearer secret_jwt_token_12345; password="mySuperSecretPassword!"';
       const output = sanitizeSecretTokens(input);
       expect(output).toContain('Bearer [REDACTED_TOKEN]');
       expect(output).toContain('password: "[REDACTED]"');

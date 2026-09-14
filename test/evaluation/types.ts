@@ -3,14 +3,14 @@
  * Supports distinct modes for Harness Integrity (Mock) and Live Pipeline Evaluation (Real LLM).
  */
 
-import type { RankedFinding } from "../../src/review/types.js";
+import type { RankedFinding } from '../../src/review/types.js';
 
-export type EvaluationMode = "harness_mock" | "live_pipeline";
+export type EvaluationMode = 'harness_mock' | 'live_pipeline';
 
 export interface ExpectedFinding {
   id: string;
-  category: "security" | "correctness" | "performance" | "architecture" | "reliability" | "testing";
-  expectedSeverity: "critical" | "high" | "medium" | "low" | "info";
+  category: 'security' | 'correctness' | 'performance' | 'architecture' | 'reliability' | 'testing';
+  expectedSeverity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   targetFile: string;
   lineRange: { start: number; end: number };
   minConfidence: number;
@@ -24,7 +24,7 @@ export interface ExpectedFinding {
 export interface GoldenFixture {
   name: string;
   category: string;
-  language: "typescript" | "python" | "markdown" | "other";
+  language: 'typescript' | 'python' | 'markdown' | 'other';
   baselineFile?: string | undefined;
   baselineContent?: string | undefined;
   vulnerableFile: string;
@@ -39,7 +39,7 @@ export interface GoldenFixture {
 export interface EvaluationResult {
   fixtureName: string;
   category: string;
-  language: "typescript" | "python" | "markdown" | "other";
+  language: 'typescript' | 'python' | 'markdown' | 'other';
   mode: EvaluationMode;
   provider: string;
   model: string;

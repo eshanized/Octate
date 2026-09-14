@@ -33,7 +33,7 @@ function makeRankedFinding(overrides?: Partial<RankedFinding>): RankedFinding {
     reviewer: 'security',
     claim: 'Concatenating req.query.id directly enables SQL injection',
     failureMechanism: 'Attacker supplies SQL fragments that break out of the string literal',
-    trigger: 'req.query.id = "\' OR \'1\'=\'1"',
+    trigger: "req.query.id = \"' OR '1'='1\"",
     requiredFix: 'db.query("SELECT * FROM users WHERE id = $1", [id])',
     finalDisposition: 'advisory',
     modelSuggestedDisposition: 'blocking',
@@ -66,7 +66,9 @@ function makeRankedFinding(overrides?: Partial<RankedFinding>): RankedFinding {
   };
 }
 
-function makeValidationResult(overrides?: Partial<EvidenceValidationResult>): EvidenceValidationResult {
+function makeValidationResult(
+  overrides?: Partial<EvidenceValidationResult>
+): EvidenceValidationResult {
   return {
     isValid: true,
     evidenceStrength: 85,
@@ -217,7 +219,8 @@ describe('Final Deterministic Decision Gate', () => {
       title: 'Argument injection in subprocess.run',
       message: 'Unvalidated user string is passed as flag argument into subprocess.run list',
       claim: 'Passing untrusted user flag allows argument injection into git binary',
-      failureMechanism: 'User supplies flag `--upload-pack=evil` which git executes as a subshell command',
+      failureMechanism:
+        'User supplies flag `--upload-pack=evil` which git executes as a subshell command',
       trigger: 'branchName = "--upload-pack=sh -c calc"',
       requiredFix: 'Validate branchName against ^[a-zA-Z0-9_.-]+$ before invoking subprocess',
       evidence: [

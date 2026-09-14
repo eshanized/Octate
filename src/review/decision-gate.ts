@@ -84,7 +84,9 @@ function isGenericText(text: string | undefined, genericList: string[]): boolean
   if (!text) return true;
   const trimmed = text.trim().toLowerCase();
   if (trimmed.length < 5) return true;
-  return genericList.some((g) => trimmed === g || trimmed.startsWith(`${g}:`) || trimmed.startsWith(`${g} `));
+  return genericList.some(
+    (g) => trimmed === g || trimmed.startsWith(`${g}:`) || trimmed.startsWith(`${g} `)
+  );
 }
 
 /**
@@ -109,13 +111,15 @@ export function evaluateFindingGate(
   const failedChecks: string[] = [];
   const reasons: string[] = [];
 
-  const findingId = finding.id || `${finding.file}:${finding.startLine}:${finding.category}:${finding.title}`;
+  const findingId =
+    finding.id || `${finding.file}:${finding.startLine}:${finding.category}:${finding.title}`;
   const suggestedDisposition = finding.modelSuggestedDisposition;
 
   // 1. Changed code relevance
   const hasDiffRelevance =
     evidenceValidation.hasDirectChangedEvidence ||
-    (finding.introducedByPatch === 'introduced_by_patch' || finding.introducedByPatch === 'worsened_by_patch');
+    finding.introducedByPatch === 'introduced_by_patch' ||
+    finding.introducedByPatch === 'worsened_by_patch';
   if (hasDiffRelevance) {
     passedChecks.push('changedCodeRelevance');
   } else {
@@ -126,7 +130,8 @@ export function evaluateFindingGate(
   // 2. Evidence validity
   const evidenceAnchorValid =
     evidenceValidation.isValid ||
-    (evidenceValidation.validEvidence.length > 0 && evidenceValidation.invalidEvidence.length === 0);
+    (evidenceValidation.validEvidence.length > 0 &&
+      evidenceValidation.invalidEvidence.length === 0);
   if (evidenceAnchorValid) {
     passedChecks.push('evidenceValid');
   } else {
@@ -138,7 +143,8 @@ export function evaluateFindingGate(
 
   // 3. Concrete failure mechanism
   const rawMechanism = finding.failureMechanism ?? finding.impact ?? finding.message;
-  const mechanismValid = !isGenericText(rawMechanism, GENERIC_MECHANISMS) && rawMechanism.length >= 10;
+  const mechanismValid =
+    !isGenericText(rawMechanism, GENERIC_MECHANISMS) && rawMechanism.length >= 10;
   if (mechanismValid) {
     passedChecks.push('concreteFailureMechanism');
   } else {
@@ -161,8 +167,7 @@ export function evaluateFindingGate(
 
   // 5. Reachable execution path
   const executionPathPlausible =
-    !isSpeculativeText(finding.message) &&
-    (finding.evidence.length > 0 || finding.startLine > 0);
+    !isSpeculativeText(finding.message) && (finding.evidence.length > 0 || finding.startLine > 0);
   if (executionPathPlausible) {
     passedChecks.push('reachableExecutionPath');
   } else {
@@ -193,7 +198,9 @@ export function evaluateFindingGate(
     passedChecks.push('justifiedSeverity');
   } else {
     failedChecks.push('justifiedSeverity');
-    reasons.push(`Severity "${finding.severity}" is not justified for category "${finding.category}"`);
+    reasons.push(
+      `Severity "${finding.severity}" is not justified for category "${finding.category}"`
+    );
   }
 
   // 8. Acceptable confidence
@@ -201,7 +208,9 @@ export function evaluateFindingGate(
     passedChecks.push('acceptableConfidence');
   } else {
     failedChecks.push('acceptableConfidence');
-    reasons.push(`Model confidence ${finding.confidence} is below minimum threshold ${minConfidence}`);
+    reasons.push(
+      `Model confidence ${finding.confidence} is below minimum threshold ${minConfidence}`
+    );
   }
 
   // 9. Patch attribution (pre-existing code CANNOT block)
@@ -214,7 +223,9 @@ export function evaluateFindingGate(
     passedChecks.push('patchAttribution');
   } else {
     failedChecks.push('patchAttribution');
-    reasons.push(`Patch attribution is "${attribution}" (pre-existing or unrelated code cannot block merges)`);
+    reasons.push(
+      `Patch attribution is "${attribution}" (pre-existing or unrelated code cannot block merges)`
+    );
   }
 
   // 10. Critic decision
@@ -242,15 +253,16 @@ export function evaluateFindingGate(
   // - Critic explicitly rejected
   // - Severe evidence fabrication (e.g. non-existent file or out-of-bounds lines)
   // - Disproven by strong contradiction with no surviving evidence
-  const hasSevereFabrication =
-    evidenceValidation.invalidEvidence.some(
-      (e) => e.reason.includes('does not exist') || e.reason.includes('exceeds total lines')
-    );
+  const hasSevereFabrication = evidenceValidation.invalidEvidence.some(
+    (e) => e.reason.includes('does not exist') || e.reason.includes('exceeds total lines')
+  );
 
   if (
     criticOutcome === 'rejected' ||
     hasSevereFabrication ||
-    (finding.contradictions && finding.contradictions.length > 0 && evidenceValidation.evidenceStrength < 30)
+    (finding.contradictions &&
+      finding.contradictions.length > 0 &&
+      evidenceValidation.evidenceStrength < 30)
   ) {
     finalDisposition = 'rejected';
   } else if (failedChecks.length === 0) {
@@ -268,7 +280,9 @@ export function evaluateFindingGate(
   }
 
   const downgraded =
-    (suggestedDisposition === 'blocking' || finding.severity === 'critical' || finding.severity === 'high') &&
+    (suggestedDisposition === 'blocking' ||
+      finding.severity === 'critical' ||
+      finding.severity === 'high') &&
     finalDisposition !== 'blocking' &&
     finalDisposition !== 'rejected';
 

@@ -4,6 +4,7 @@
  */
 
 import path from 'node:path';
+import { isSafeIdiom } from '../analysis/semantic-patterns.js';
 import type { SymbolIndex } from '../intelligence/index/symbol-index.js';
 import type { ModelFinding } from '../model/types.js';
 
@@ -453,12 +454,26 @@ const BENIGN_OR_SPECULATIVE_PATTERNS = [
  * Checks whether a finding is a known benign pattern, speculative observation, or stylistic nit.
  */
 export function isBenignOrSpeculative(finding: ModelFinding): boolean {
-  const text = `${finding.title} ${finding.message} ${finding.suggestedFix}`.toLowerCase();
+  const text =
+    `${finding.title} ${finding.message} ${finding.suggestedFix} ${finding.claim ?? ''}`.toLowerCase();
 
   for (const pattern of BENIGN_OR_SPECULATIVE_PATTERNS) {
     if (pattern.test(text)) {
       return true;
     }
   }
+
+  // Extract inline and fenced code blocks from finding message or claim
+  const targetText = `${finding.message}\n${finding.claim ?? ''}`;
+  const codeRegex = /`([^`]+)`|```[\w]*\n([\s\S]*?)\n```/g;
+  let match = codeRegex.exec(targetText);
+  while (match !== null) {
+    const snippet = (match[1] || match[2] || '').trim();
+    if (snippet && isSafeIdiom(snippet)) {
+      return true;
+    }
+    match = codeRegex.exec(targetText);
+  }
+
   return false;
 }

@@ -1,0 +1,14 @@
+{
+  "id": "sec-safe-subprocess-run",
+  "category": "security",
+  "expectedSeverity": "info",
+  "targetFile": "scripts/git_runner.py",
+  "lineRange": {
+    "start": 4,
+    "end": 8
+  },
+  "minConfidence": 0.8,
+  "negativeVariantFile": "clean.py",
+  "expectedNegativeFindings": 0,
+  "hasDefect": false
+}

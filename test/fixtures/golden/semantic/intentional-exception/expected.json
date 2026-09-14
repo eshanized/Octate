@@ -1,0 +1,14 @@
+{
+  "id": "sem-intentional-exception",
+  "category": "semantic",
+  "expectedSeverity": "info",
+  "targetFile": "src/errors/user.ts",
+  "lineRange": {
+    "start": 8,
+    "end": 14
+  },
+  "minConfidence": 0.8,
+  "negativeVariantFile": "clean.ts",
+  "expectedNegativeFindings": 0,
+  "hasDefect": false
+}

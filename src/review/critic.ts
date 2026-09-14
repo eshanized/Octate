@@ -370,7 +370,8 @@ export async function executeCriticStage(params: CriticParams): Promise<CriticRe
       trigger: finding.trigger ?? 'Specific input conditions triggering this defect',
       requiredFix: finding.requiredFix ?? finding.suggestedFix,
       criticDecision: decision,
-      criticReason: finding.criticReason ?? 'Verified against repository reality and diff boundaries',
+      criticReason:
+        finding.criticReason ?? 'Verified against repository reality and diff boundaries',
       introducedByPatch: finding.introducedByPatch ?? 'introduced_by_patch',
       modelSuggestedDisposition:
         finding.modelSuggestedDisposition ??

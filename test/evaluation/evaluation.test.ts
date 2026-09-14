@@ -11,12 +11,15 @@ import type { EvaluationScorecard } from './types.js';
 describe('Golden Review Evaluation Testbed', () => {
   it('loads all golden fixtures across categories and languages', async () => {
     const fixtures = await loadGoldenFixtures();
-    expect(fixtures.length).toBe(8);
+    expect(fixtures.length).toBe(11);
 
     const names = fixtures.map((f) => f.name);
     expect(names).toContain('security/sql-injection');
     expect(names).toContain('security/command-injection');
     expect(names).toContain('security/sql-clean-type-assertion');
+    expect(names).toContain('security/safe-subprocess-run');
+    expect(names).toContain('semantic/bounded-loop');
+    expect(names).toContain('semantic/intentional-exception');
     expect(names).toContain('structural/resource-leak');
     expect(names).toContain('semantic/logic-regression');
     expect(names).toContain('refactor/unrelated-refactor');
@@ -136,7 +139,7 @@ describe('Golden Review Evaluation Testbed', () => {
       expect(scorecard).toBeDefined();
       expect(scorecard.mode).toBe('harness_mock');
       expect(scorecard.disclaimer).toContain('MockReviewModel is pre-programmed');
-      expect(scorecard.results).toHaveLength(8);
+      expect(scorecard.results).toHaveLength(11);
     }, 60000);
 
     it('verifies individual fixtures detect defect and suppress clean false-positives', () => {

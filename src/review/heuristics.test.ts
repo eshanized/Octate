@@ -444,6 +444,33 @@ describe('heuristics', () => {
       expect(isBenignOrSpeculative(finding)).toBe(true);
     });
 
+    it('flags safe subprocess list execution as benign or speculative', () => {
+      const finding = createTestFinding({
+        title: 'Review subprocess execution',
+        message: 'Calling `subprocess.run(["git", "status"], check=True)` without explicit path',
+        suggestedFix: 'Verify git is available in PATH',
+      });
+      expect(isBenignOrSpeculative(finding)).toBe(true);
+    });
+
+    it('flags bounded loops as benign or speculative', () => {
+      const finding = createTestFinding({
+        title: 'Potential loop performance issue',
+        message: 'Loop `for (let i = 0; i < items.length; i++)` iterates sequentially',
+        suggestedFix: 'Consider parallelizing with Promise.all',
+      });
+      expect(isBenignOrSpeculative(finding)).toBe(true);
+    });
+
+    it('flags intentional exception throwing as benign or speculative', () => {
+      const finding = createTestFinding({
+        title: 'Explicit error throwing',
+        message: 'Method executes `throw new NotFoundError("Not found")` when resource is missing',
+        suggestedFix: 'Return null instead of throwing error',
+      });
+      expect(isBenignOrSpeculative(finding)).toBe(true);
+    });
+
     it('does not flag real vulnerabilities as benign or speculative', () => {
       const sqlInjection = createTestFinding({
         title: 'SQL Injection via string interpolation',
