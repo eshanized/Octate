@@ -1,6 +1,18 @@
 # Octate 🐙
 
-> **Terminal-native AI code review CLI.** Deterministic repository intelligence meets LLM reasoning.
+<div align="center">
+
+[![Release](https://img.shields.io/github/v/release/vedanthq/Octate?color=blue&style=flat-square)](https://github.com/vedanthq/Octate/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.0.0-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![NVIDIA AI](https://img.shields.io/badge/NVIDIA-Nemotron--3--Ultra-76B900?style=flat-square&logo=nvidia&logoColor=white)](https://build.nvidia.com)
+[![SARIF v2.1.0](https://img.shields.io/badge/SARIF-v2.1.0-blueviolet?style=flat-square)](https://sarifweb.azurewebsites.net/)
+[![Discussions](https://img.shields.io/badge/Discussions-Join-orange?style=flat-square&logo=github)](https://github.com/vedanthq/Octate/discussions)
+
+**Terminal-native AI code review CLI.** Deterministic repository intelligence meets LLM reasoning.
+
+</div>
 
 Octate is a developer-first, terminal-native AI code-review tool. Run `octate review` inside any real Git repository and receive high-value, evidence-backed findings in an interactive terminal user interface (TUI), with `--json`, `--sarif`, and `--quiet` modes for automated CI/CD workflows.
 

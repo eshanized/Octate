@@ -1,0 +1,28 @@
+name: 💡 Feature Request
+description: Propose a new feature, reviewer role, or enhancement for Octate
+title: "[Feature]: "
+labels: ["type: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement to Octate!
+  - type: textarea
+    id: feature
+    attributes:
+      label: Proposed Feature or Improvement
+      description: What would you like Octate to be able to do?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Use Case
+      description: Why is this feature needed? What problem does it solve for your development workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
