@@ -73,7 +73,7 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'mock',
           totalTokens: 0,
           promptTokens: 0,
@@ -187,7 +187,7 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'mock',
           totalTokens: 0,
           promptTokens: 0,

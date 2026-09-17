@@ -121,7 +121,7 @@ export function createMockReviewResult(
     metadata: {
       scopeType: 'working-tree',
       timestamp: new Date().toISOString(),
-      version: '0.1.0',
+      version: '1.0.0',
       model: 'mock-model',
       totalTokens: 500,
       promptTokens: 400,

@@ -1,6 +1,6 @@
 {
   "name": "@tiverse/octate",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Terminal-native AI code review CLI. Deterministic repository intelligence meets LLM reasoning.",
   "type": "module",
   "license": "MIT",

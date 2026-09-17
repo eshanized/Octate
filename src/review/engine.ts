@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from '../logging/index.js';
+import { OCTATE_VERSION } from '../version.js';
 import { executeCriticStage } from './critic.js';
 import { executeReviewDAG } from './dag.js';
 import { runDecisionGate } from './decision-gate.js';
@@ -77,7 +78,7 @@ export class ReviewEngine {
           base: input.scopeMetadata?.base,
           head: input.scopeMetadata?.head,
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: OCTATE_VERSION,
           model: modelName,
           totalTokens: 0,
           promptTokens: 0,
@@ -335,7 +336,7 @@ export class ReviewEngine {
       base: input.scopeMetadata?.base,
       head: input.scopeMetadata?.head,
       timestamp: new Date().toISOString(),
-      version: '0.1.0',
+      version: OCTATE_VERSION,
       model: modelName,
       totalTokens,
       promptTokens,

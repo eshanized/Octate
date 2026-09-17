@@ -10,6 +10,7 @@ import {
   SarifRunBuilder,
 } from 'node-sarif-builder';
 import type { ReviewResult, ReviewSeverity } from '../review/types.js';
+import { OCTATE_VERSION } from '../version.js';
 import { type RendererOptions, type ReviewRenderer, writeRenderedOutput } from './types.js';
 
 /**
@@ -66,7 +67,7 @@ export class SarifRenderer implements ReviewRenderer {
     // Initialize driver information per D-14
     runBuilder.initSimple({
       toolDriverName: 'Octate',
-      toolDriverVersion: result.metadata.version || '0.1.0',
+      toolDriverVersion: result.metadata.version || OCTATE_VERSION,
       url: 'https://octate.dev',
     });
 

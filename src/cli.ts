@@ -17,6 +17,7 @@ import type { CancellationController } from './cancellation/index.js';
 import { registerCommands } from './commands/index.js';
 import { isOctateError } from './errors/index.js';
 import { createLogger } from './logging/index.js';
+import { OCTATE_VERSION } from './version.js';
 
 const logger = createLogger('cli');
 
@@ -41,7 +42,7 @@ export function createProgram(): Command {
   program
     .name('octate')
     .description('Terminal-native AI code review CLI')
-    .version('0.1.0', '-v, --version', 'Display version number')
+    .version(OCTATE_VERSION, '-v, --version', 'Display version number')
     .exitOverride()
     .hook('preAction', (thisCommand, actionCommand) => {
       // Merge global options from parent commands

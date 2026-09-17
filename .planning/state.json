@@ -1,0 +1,53 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v1.0.0",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Foundation & Repository Layer",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Analysis Layer",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Intelligence Layer",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Model Provider",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Review Engine",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Application Layer",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Terminal Presentation",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "CLI Integration, Polish & Evaluation",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd-new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
+  },
+  "updated_at": "2026-09-17T13:50:09.528Z"
+}

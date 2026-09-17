@@ -171,7 +171,7 @@ describe('commands:doctor', () => {
 
       const sampleResult = {
         timestamp: new Date().toISOString(),
-        version: '0.1.0',
+        version: '1.0.0',
         checks: [{ name: 'Node.js Runtime', status: 'pass' as const, message: 'Node.js v22.0.0' }],
         overall: 'pass' as const,
       };
@@ -192,7 +192,7 @@ describe('commands:doctor', () => {
 
       const sampleResult = {
         timestamp: new Date().toISOString(),
-        version: '0.1.0',
+        version: '1.0.0',
         checks: [
           { name: 'Check 1', status: 'pass' as const, message: 'ok' },
           { name: 'Check 2', status: 'warn' as const, message: 'warn' },

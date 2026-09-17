@@ -376,7 +376,7 @@ describe('Phase 9: CLI Option Validation, TUI & Presentation Stress Tests', () =
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'nemotron',
           totalTokens: 150,
           promptTokens: 100,
@@ -459,7 +459,7 @@ describe('Phase 9: CLI Option Validation, TUI & Presentation Stress Tests', () =
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'nemotron',
           totalTokens: 0,
           promptTokens: 0,

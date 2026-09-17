@@ -12,39 +12,39 @@ Make developers trust `octate review` by combining deterministic repository anal
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] **REPO-01**: Discover and analyze the local Git repository (working tree, staged changes, commit ranges, branch comparisons)
+- [x] **REPO-02**: Generate Git diffs for the selected review scope with base/head/changed files/lines explicitly known
+- [x] **REPO-03**: Handle monorepos, symlinks, large files, binary files, generated files, ignored files, vendor dirs, node_modules, build output, and unusual Git worktrees safely
+- [x] **PARSE-01**: Parse TypeScript, JavaScript, and Python files using Tree-sitter for syntax trees, symbol discovery, imports/exports, and structural relationships
+- [x] **PARSE-02**: Extract symbols (functions, methods, classes, interfaces, types, constants, variables, modules, exports, imports) with stable IDs, names, kinds, languages, file locations, ranges, parents, exported status, and references
+- [x] **PARSE-03**: Build a reference graph tracking caller→callee, importer→imported, implementation→interface, test→production, route→handler, handler→service, service→repository relationships with bounded traversal
+- [x] **PARSE-04**: Build a dependency graph tracking package dependencies, workspace packages, internal module dependencies, imports, runtime/dev/optional dependencies
+- [x] **ANAL-01**: Run deterministic static analysis (TypeScript compiler, ESLint/Biome, ruff, mypy/pyright, pytest, bandit) respecting the repository's existing configuration
+- [x] **ANAL-02**: Collect diagnostics, test discovery, and security scanner results for AI consumption
+- [x] **CTX-01**: Build a Context Engine that ranks candidates (changed symbols, direct callers/callees, related types/tests/config/history/diagnostics) and produces a bounded ReviewContext within token budgets
+- [x] **CTX-02**: Serialize context with clear separation: trusted instructions, trusted project rules, review task, repository metadata, diff, relevant source, static diagnostics — repository source as untrusted content
+- [x] **REV-01**: Implement Review DAG with Structural Reviewer (API contracts, type misuse, lifecycle, error handling, nullability, resource management, concurrency, test gaps), Semantic Reviewer (business logic regressions, incorrect assumptions, behavioral changes, state transitions, edge cases, cross-module behavior, compatibility), Security Reviewer (auth, authz, input validation, injection, SSRF, path traversal, privilege escalation, secrets, crypto, deserialization, data exposure)
+- [x] **REV-02**: Implement Critic to reduce false positives (truth verification, evidence proof, intentionality check, duplicate handling, impact meaningfulness, severity justification, actionability, deduplication, senior-engineer judgment)
+- [x] **REV-03**: Deduplicate findings using file/range, issue signature, symbol, evidence overlap, semantic similarity — keep strongest explanation
+- [x] **REV-04**: Rank findings by severity, confidence, evidence strength, blast radius, security impact, regression probability, actionability
+- [x] **MODEL-01**: NVIDIA Nemotron 3 Ultra 550B-A55B provider with API auth, HTTP, request/response serialization, timeout, retry, rate-limit handling, structured errors, cancellation, usage metadata
+- [x] **MODEL-02**: Model abstraction interface (`ReviewModel.generate(request): Promise<ModelResponse>`) — core depends on abstraction, not NVIDIA specifics
+- [x] **MODEL-03**: Schema-validated structured output (findings with severity, category, title, message, file, line ranges, confidence, evidence, suggested fix) — validate schema, file paths, line ranges, severity, confidence, evidence, categories
+- [x] **MODEL-04**: Prompt injection protection — trusted (system policy, Octate rules, review task) vs untrusted (source, comments, README, commit messages, repo config, generated files) separation in prompt architecture
+- [x] **TUI-01**: Interactive TUI workspace with header (repo, scope, branch, finding count), finding navigator (critical/high/medium/low/info), source/diff view, finding details (title, explanation, impact, confidence, evidence), actions (inspect, explain, fix, suppress, next/prev)
+- [x] **TUI-02**: Keyboard-first navigation (↑/k prev, ↓/j next, Enter inspect, f fix, e explain, s suppress, r re-review, d diff, c context, q quit, Esc back, ? help)
+- [x] **TUI-03**: Progress streaming (reading Git state, updating index, resolving symbols, collecting diagnostics, building context, running AI reviewers, validating findings, ranking findings)
+- [x] **OUT-01**: Non-interactive output modes: `--json`, `--sarif`, `--quiet` with common domain result transformed by InteractiveRenderer, HumanRenderer, JsonRenderer, SarifRenderer
+- [x] **OUT-02**: Stable exit codes (0=passed, 1=blocking findings, 2=usage/config error, 3=repo/Git error, 4=model/provider error, 5=internal error)
+- [x] **CONF-01**: Configuration via `octate.yaml` with version, project name, review severity/max_findings, rules, architecture boundaries/forbidden_dependencies, ignore patterns
+- [x] **CONF-02**: Configuration precedence: built-in defaults → global config → project octate.yaml → env vars → CLI args
+- [x] **CACHE-01**: Local cache at `~/.local/share/octate/` with indexes, cache, findings, logs — project identity namespaced, incremental indexing via content hash/file path/parser version/language/config version
+- [x] **CACHE-02**: Bounded concurrency with promise pool/task queue — parallelize parsing, diagnostics, reviewers
+- [x] **CACHE-03**: Graceful cancellation (Ctrl+C) stopping model requests, analysis subprocesses, indexing, background tasks — no orphaned processes
 
 ### Active
 
-- [ ] **REPO-01**: Discover and analyze the local Git repository (working tree, staged changes, commit ranges, branch comparisons)
-- [ ] **REPO-02**: Generate Git diffs for the selected review scope with base/head/changed files/lines explicitly known
-- [ ] **REPO-03**: Handle monorepos, symlinks, large files, binary files, generated files, ignored files, vendor dirs, node_modules, build output, and unusual Git worktrees safely
-- [ ] **PARSE-01**: Parse TypeScript, JavaScript, and Python files using Tree-sitter for syntax trees, symbol discovery, imports/exports, and structural relationships
-- [ ] **PARSE-02**: Extract symbols (functions, methods, classes, interfaces, types, constants, variables, modules, exports, imports) with stable IDs, names, kinds, languages, file locations, ranges, parents, exported status, and references
-- [ ] **PARSE-03**: Build a reference graph tracking caller→callee, importer→imported, implementation→interface, test→production, route→handler, handler→service, service→repository relationships with bounded traversal
-- [ ] **PARSE-04**: Build a dependency graph tracking package dependencies, workspace packages, internal module dependencies, imports, runtime/dev/optional dependencies
-- [ ] **ANAL-01**: Run deterministic static analysis (TypeScript compiler, ESLint/Biome, ruff, mypy/pyright, pytest, bandit) respecting the repository's existing configuration
-- [ ] **ANAL-02**: Collect diagnostics, test discovery, and security scanner results for AI consumption
-- [ ] **CTX-01**: Build a Context Engine that ranks candidates (changed symbols, direct callers/callees, related types/tests/config/history/diagnostics) and produces a bounded ReviewContext within token budgets
-- [ ] **CTX-02**: Serialize context with clear separation: trusted instructions, trusted project rules, review task, repository metadata, diff, relevant source, static diagnostics — repository source as untrusted content
-- [ ] **REV-01**: Implement Review DAG with Structural Reviewer (API contracts, type misuse, lifecycle, error handling, nullability, resource management, concurrency, test gaps), Semantic Reviewer (business logic regressions, incorrect assumptions, behavioral changes, state transitions, edge cases, cross-module behavior, compatibility), Security Reviewer (auth, authz, input validation, injection, SSRF, path traversal, privilege escalation, secrets, crypto, deserialization, data exposure)
-- [ ] **REV-02**: Implement Critic to reduce false positives (truth verification, evidence proof, intentionality check, duplicate handling, impact meaningfulness, severity justification, actionability, deduplication, senior-engineer judgment)
-- [ ] **REV-03**: Deduplicate findings using file/range, issue signature, symbol, evidence overlap, semantic similarity — keep strongest explanation
-- [ ] **REV-04**: Rank findings by severity, confidence, evidence strength, blast radius, security impact, regression probability, actionability
-- [ ] **MODEL-01**: NVIDIA Nemotron 3 Ultra 550B-A55B provider with API auth, HTTP, request/response serialization, timeout, retry, rate-limit handling, structured errors, cancellation, usage metadata
-- [ ] **MODEL-02**: Model abstraction interface (`ReviewModel.generate(request): Promise<ModelResponse>`) — core depends on abstraction, not NVIDIA specifics
-- [ ] **MODEL-03**: Schema-validated structured output (findings with severity, category, title, message, file, line ranges, confidence, evidence, suggested fix) — validate schema, file paths, line ranges, severity, confidence, evidence, categories
-- [ ] **MODEL-04**: Prompt injection protection — trusted (system policy, Octate rules, review task) vs untrusted (source, comments, README, commit messages, repo config, generated files) separation in prompt architecture
-- [ ] **TUI-01**: Interactive TUI workspace with header (repo, scope, branch, finding count), finding navigator (critical/high/medium/low/info), source/diff view, finding details (title, explanation, impact, confidence, evidence), actions (inspect, explain, fix, suppress, next/prev)
-- [ ] **TUI-02**: Keyboard-first navigation (↑/k prev, ↓/j next, Enter inspect, f fix, e explain, s suppress, r re-review, d diff, c context, q quit, Esc back, ? help)
-- [ ] **TUI-03**: Progress streaming (reading Git state, updating index, resolving symbols, collecting diagnostics, building context, running AI reviewers, validating findings, ranking findings)
-- [ ] **OUT-01**: Non-interactive output modes: `--json`, `--sarif`, `--quiet` with common domain result transformed by InteractiveRenderer, HumanRenderer, JsonRenderer, SarifRenderer
-- [ ] **OUT-02**: Stable exit codes (0=passed, 1=blocking findings, 2=usage/config error, 3=repo/Git error, 4=model/provider error, 5=internal error)
-- [ ] **CONF-01**: Configuration via `octate.yaml` with version, project name, review severity/max_findings, rules, architecture boundaries/forbidden_dependencies, ignore patterns
-- [ ] **CONF-02**: Configuration precedence: built-in defaults → global config → project octate.yaml → env vars → CLI args
-- [ ] **CACHE-01**: Local cache at `~/.local/share/octate/` with indexes, cache, findings, logs — project identity namespaced, incremental indexing via content hash/file path/parser version/language/config version
-- [ ] **CACHE-02**: Bounded concurrency with promise pool/task queue — parallelize parsing, diagnostics, reviewers
-- [ ] **CACHE-03**: Graceful cancellation (Ctrl+C) stopping model requests, analysis subprocesses, indexing, background tasks — no orphaned processes
+(None currently — Milestone v1.0.0 Complete)
 
 ### Out of Scope
 
@@ -136,4 +136,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2025-09-06 after initialization*
+*Last updated: 2026-09-17 after Milestone v1.0.0 completion*

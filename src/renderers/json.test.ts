@@ -52,7 +52,7 @@ describe('renderers:json', () => {
     expect(parsed.findings).toHaveLength(1);
     expect(parsed.findings[0].title).toBe('Buffer overflow risk');
     expect(parsed.summary.totalFindings).toBe(1);
-    expect(parsed.metadata.version).toBe('0.1.0');
+    expect(parsed.metadata.version).toBe('1.0.0');
   });
 
   it('writes output to an outputFile creating nested directories', async () => {
