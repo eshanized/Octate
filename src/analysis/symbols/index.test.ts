@@ -2,10 +2,15 @@
  * Tests for symbol extraction.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from '@jest/globals';
 import * as webTreeSitter from 'web-tree-sitter';
 import type { ParsedFile } from '../types.js';
 import { extractSymbols, symbolId } from './index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { Parser, Language } = webTreeSitter;
 
@@ -17,13 +22,13 @@ describe('Symbol Extraction', () => {
 
   beforeAll(async () => {
     await Parser.init();
-    const wasmDir = '/home/ved/Desktop/project_i/Octate/test-wasm';
+    const wasmDir = path.resolve(__dirname, '../../../test-wasm');
 
-    tsLanguage = await Language.load(`${wasmDir}/tree-sitter-typescript.wasm`);
+    tsLanguage = await Language.load(path.join(wasmDir, 'tree-sitter-typescript.wasm'));
     tsParser = new Parser();
     tsParser.setLanguage(tsLanguage);
 
-    pyLanguage = await Language.load(`${wasmDir}/tree-sitter-python.wasm`);
+    pyLanguage = await Language.load(path.join(wasmDir, 'tree-sitter-python.wasm'));
     pyParser = new Parser();
     pyParser.setLanguage(pyLanguage);
   });

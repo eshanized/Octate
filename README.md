@@ -36,13 +36,13 @@ Octate is a developer-first, terminal-native AI code-review tool. Run `octate re
 Run a review immediately with zero installation required:
 
 ```bash
-npx octate review
+npx @tiverse/octate review
 ```
 
 Or install globally:
 
 ```bash
-npm install -g octate
+npm install -g @tiverse/octate
 ```
 
 Verify your environment readiness:

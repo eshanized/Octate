@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import type { ModelFinding } from '../model/types.js';
-import { parseDetailedDiff, type ParsedDiffInfo } from './evidence-validator.js';
+import { type ParsedDiffInfo, parseDetailedDiff } from './evidence-validator.js';
 import type { PatchAttribution } from './types.js';
 
 export interface AttributionOptions {

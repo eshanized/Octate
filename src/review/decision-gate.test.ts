@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from '@jest/globals';
-import type { EvidenceValidationResult } from './evidence-validator.js';
 import { evaluateFindingGate, runDecisionGate } from './decision-gate.js';
+import type { EvidenceValidationResult } from './evidence-validator.js';
 import type { RankedFinding } from './types.js';
 
 function makeRankedFinding(overrides?: Partial<RankedFinding>): RankedFinding {

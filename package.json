@@ -1,13 +1,35 @@
 {
-  "name": "octate",
+  "name": "@tiverse/octate",
   "version": "0.1.0",
-  "private": true,
+  "description": "Terminal-native AI code review CLI. Deterministic repository intelligence meets LLM reasoning.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eshanized/Octate.git"
+  },
+  "homepage": "https://github.com/eshanized/Octate#readme",
+  "bugs": {
+    "url": "https://github.com/eshanized/Octate/issues"
+  },
+  "keywords": [
+    "ai",
+    "code-review",
+    "cli",
+    "tui",
+    "terminal",
+    "sarif",
+    "tree-sitter",
+    "developer-tools"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
   "bin": {
     "octate": "./bin/octate"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "bin",
@@ -26,8 +48,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "biome check --apply .",
-    "prepare": "husky install"
+    "check": "biome check --write .",
+    "prepare": "husky install",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@microsoft/sarif": "latest",
