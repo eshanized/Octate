@@ -60,7 +60,7 @@ export class ConsoleRenderer implements ReviewRenderer {
     } else {
       for (const finding of result.findings) {
         const line = finding.startLine ?? finding.line ?? 1;
-        lines.push(`  ${formatBadge(finding.severity)} ${pc.bold(finding.file)}:${line}`);
+        lines.push(`  ${formatBadge(finding.severity)} ${pc.bold(`${finding.file}:${line}`)}`);
         lines.push(`      ${finding.title}`);
         lines.push(`      ${pc.dim(finding.message)}`);
         if (finding.suggestedFix) {

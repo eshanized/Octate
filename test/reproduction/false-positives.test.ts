@@ -2,9 +2,9 @@ import { describe, expect, it } from '@jest/globals';
 import { evaluateExitCode, isBlockingFinding } from '../../src/application/policy.js';
 import { ReferenceGraph } from '../../src/intelligence/graph/reference.js';
 import type { ModelFinding } from '../../src/model/types.js';
+import { MockReviewModel } from '../../src/review/__tests__/mocks.js';
 import { executeCriticStage } from '../../src/review/critic.js';
 import { rankAndTruncateFindings } from '../../src/review/ranking.js';
-import { MockReviewModel } from '../../src/review/__tests__/mocks.js';
 
 describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
   const dummyRefGraph = new ReferenceGraph();
@@ -73,7 +73,7 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'mock',
           totalTokens: 0,
           promptTokens: 0,
@@ -187,7 +187,7 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
         metadata: {
           scopeType: 'working-tree',
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: '1.0.0',
           model: 'mock',
           totalTokens: 0,
           promptTokens: 0,

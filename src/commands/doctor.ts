@@ -12,6 +12,7 @@ import { loadConfig } from '../config/merger.js';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
 import { findGitRoot } from '../repository/discovery.js';
+import { OCTATE_VERSION } from '../version.js';
 
 const logger = createLogger('commands:doctor');
 
@@ -556,7 +557,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorResu
 
   const result: DoctorResult = {
     timestamp: new Date().toISOString(),
-    version: '0.1.0',
+    version: OCTATE_VERSION,
     checks,
     overall,
   };

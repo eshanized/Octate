@@ -2,9 +2,10 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
-  '@parcel/watcher': set this to true or false
-  esbuild: set this to true or false
+  '@parcel/watcher': true
+  esbuild: true
   tree-sitter-javascript: true
   tree-sitter-python: true
   tree-sitter-typescript: true
-  unrs-resolver: set this to true or false
+  unrs-resolver: true
+

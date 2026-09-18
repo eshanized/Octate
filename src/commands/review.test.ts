@@ -105,7 +105,7 @@ function createMockResult(findings: RankedFinding[]): ReviewResult {
     metadata: {
       scopeType: 'working-tree',
       timestamp: new Date().toISOString(),
-      version: '0.1.0',
+      version: '1.0.0',
       model: 'test-model',
       totalTokens: 100,
       promptTokens: 50,
@@ -326,7 +326,7 @@ describe('commands:review', () => {
       expect(result.summary.totalFindings).toBe(0);
       expect(result.findings).toEqual([]);
       expect(result.metadata.scopeType).toBe('working-tree');
-      expect(result.metadata.version).toBe('0.1.0');
+      expect(result.metadata.version).toBe('1.0.0');
     });
   });
 

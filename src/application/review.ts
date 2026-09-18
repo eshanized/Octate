@@ -22,6 +22,7 @@ import { findGitRoot } from '../repository/discovery.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
+import { OCTATE_VERSION } from '../version.js';
 import type { CanonicalReviewStage, ReviewProgressStatus, ReviewUseCaseOptions } from './types.js';
 
 const logger = createLogger('application:review');
@@ -105,7 +106,7 @@ export class ReviewUseCase {
           base: scope.base,
           head: scope.head,
           timestamp: new Date().toISOString(),
-          version: '0.1.0',
+          version: OCTATE_VERSION,
           model: modelName,
           totalTokens: 0,
           promptTokens: 0,

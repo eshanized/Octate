@@ -418,7 +418,7 @@ export async function runEvaluationHarness(
         !(options.modelOverride instanceof LocalNvidiaProvider)
       ) {
         throw new Error(
-          `Live evaluation invariant violated: Provider ${options.modelOverride.constructor.name} is not permitted. Only NVIDIA provider is authorized for 0.1.0 release.`
+          `Live evaluation invariant violated: Provider ${options.modelOverride.constructor.name} is not permitted. Only NVIDIA provider is authorized for 1.0.0 release.`
         );
       }
       liveProvider = options.modelOverride as LocalNvidiaProvider;
@@ -494,7 +494,7 @@ export async function runEvaluationHarness(
       metadata: {
         scopeType: 'working-tree',
         timestamp: new Date().toISOString(),
-        version: '0.1.0',
+        version: '1.0.0',
         model: modelName,
         totalTokens: 0,
         promptTokens: 0,

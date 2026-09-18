@@ -96,7 +96,7 @@ describe('ReviewEngine', () => {
     expect(topFinding.contributingReviewers).toContain('structural');
 
     expect(result.metadata.scopeType).toBe('working-tree');
-    expect(result.metadata.version).toBe('0.1.0');
+    expect(result.metadata.version).toBe('1.0.0');
     expect(result.metadata.criticInvoked).toBe(true);
     expect(result.metadata.preCriticFindingCount).toBe(1);
     expect(result.metadata.postCriticFindingCount).toBe(1);

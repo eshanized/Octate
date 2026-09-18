@@ -38,7 +38,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Octate
-        run: npm install -g octate
+        run: npm install -g @tiverse/octate
 
       - name: Run Diagnostics
         run: octate doctor --quiet
