@@ -4,7 +4,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import type { Ignore } from 'ignore';
 import ignore from 'ignore';
 
