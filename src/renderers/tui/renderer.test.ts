@@ -115,4 +115,21 @@ describe('renderers:tui:renderer', () => {
     const stderr = mockStderr.join('');
     expect(stderr).toContain('1 blocking findings (exit 1)');
   });
+
+  it('uses the latest result after a re-review before calculating exit status', async () => {
+    const initial = createMockReviewResult([
+      createMockFinding('critical', { id: 'initial-critical', compositeScore: 95 }),
+    ]);
+    const renderer = new InteractiveTuiRenderer({ stream: mockStream, failOn: 'high' });
+    renderer.start();
+
+    const renderPromise = renderer.render(initial);
+    // Simulate a completed re-review that clears the original finding.
+    renderer.dispatchResult(createMockReviewResult([]));
+    renderer.exit();
+    await renderPromise;
+
+    expect(process.exitCode).toBe(0);
+    expect(mockStderr.join('')).toContain('clean (exit 0)');
+  });
 });
