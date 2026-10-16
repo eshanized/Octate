@@ -694,7 +694,7 @@ async function readBlobAtCommit(
  * avoids accidentally using the working-tree contents for staged changes.
  */
 async function readIndexOids(gitDir: string): Promise<Map<string, string>> {
-  const entries = await GitIndexManager.acquire(
+  const entries: Array<{ filepath: string; oid: string }> = await GitIndexManager.acquire(
     { fs: indexFs, gitdir: gitDir, cache: {} },
     (index: { entries: Array<{ path: string; oid: string; flags: { stage: number } }> }) =>
       index.entries
