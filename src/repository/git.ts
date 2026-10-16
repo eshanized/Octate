@@ -492,6 +492,26 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
   const oldLines = splitContentLines(oldContent);
   const newLines = splitContentLines(newContent);
   const operations = createDiffOperations(oldLines, newLines);
+
+  // A final-newline-only change is still a real content change. Represent it
+  // as a remove/add pair so the unified diff carries the correct EOF marker.
+  if (
+    oldContent.endsWith('\n') !== newContent.endsWith('\n') &&
+    oldLines.length > 0 &&
+    newLines.length > 0 &&
+    oldLines[oldLines.length - 1] === newLines[newLines.length - 1]
+  ) {
+    const last = operations[operations.length - 1];
+    if (last?.kind === 'context') {
+      operations.splice(
+        operations.length - 1,
+        1,
+        { kind: 'remove', line: last.line, oldLine: last.oldLine, newLine: last.newLine },
+        { kind: 'add', line: last.line, oldLine: last.oldLine, newLine: last.newLine }
+      );
+    }
+  }
+
   const changedIndexes = operations
     .map((operation, index) => operation.kind === 'context' ? -1 : index)
     .filter((index) => index >= 0);
