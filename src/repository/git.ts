@@ -423,15 +423,19 @@ type DiffOperation = {
 function createDiffOperations(oldLines: string[], newLines: string[]): DiffOperation[] {
   let operations: DiffOperation[] = [];
   if (oldLines.length * newLines.length <= 1_000_000) {
-    const lcs = Array.from({ length: oldLines.length + 1 }, () => new Uint32Array(newLines.length + 1));
+    const lcs = Array.from(
+      { length: oldLines.length + 1 },
+      () => new Uint32Array(newLines.length + 1)
+    );
     for (let i = oldLines.length - 1; i >= 0; i--) {
       const row = lcs[i];
       const nextRow = lcs[i + 1];
       if (!row || !nextRow) continue;
       for (let j = newLines.length - 1; j >= 0; j--) {
-        row[j] = oldLines[i] === newLines[j]
-          ? (nextRow[j + 1] ?? 0) + 1
-          : Math.max(nextRow[j] ?? 0, row[j + 1] ?? 0);
+        row[j] =
+          oldLines[i] === newLines[j]
+            ? (nextRow[j + 1] ?? 0) + 1
+            : Math.max(nextRow[j] ?? 0, row[j + 1] ?? 0);
       }
     }
 
@@ -442,29 +446,42 @@ function createDiffOperations(oldLines: string[], newLines: string[]): DiffOpera
     while (i < oldLines.length || j < newLines.length) {
       if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
         operations.push({ kind: 'context', line: oldLines[i] ?? '', oldLine, newLine });
-        i++; j++; oldLine++; newLine++;
+        i++;
+        j++;
+        oldLine++;
+        newLine++;
       } else if (
         i < oldLines.length &&
         (j >= newLines.length || (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))
       ) {
         operations.push({ kind: 'remove', line: oldLines[i] ?? '', oldLine, newLine });
-        i++; oldLine++;
+        i++;
+        oldLine++;
       } else {
         operations.push({ kind: 'add', line: newLines[j] ?? '', oldLine, newLine });
-        j++; newLine++;
+        j++;
+        newLine++;
       }
     }
     return operations;
   }
 
   let prefix = 0;
-  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
+  while (
+    prefix < oldLines.length &&
+    prefix < newLines.length &&
+    oldLines[prefix] === newLines[prefix]
+  ) {
+    prefix++;
+  }
   let suffix = 0;
   while (
     suffix < oldLines.length - prefix &&
     suffix < newLines.length - prefix &&
     oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
-  ) suffix++;
+  ) {
+    suffix++;
+  }
 
   let oldLine = 1;
   let newLine = 1;
@@ -483,7 +500,8 @@ function createDiffOperations(oldLines: string[], newLines: string[]): DiffOpera
   }
   for (let k = oldLines.length - suffix; k < oldLines.length; k++) {
     operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
-    oldLine++; newLine++;
+    oldLine++;
+    newLine++;
   }
   return operations;
 }
@@ -545,14 +563,8 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
     for (const operation of hunk) {
       const prefix = operation.kind === 'context' ? ' ' : operation.kind === 'remove' ? '-' : '+';
       diffLines.push(prefix + operation.line);
-      const oldHasNoNewline =
-        operation.kind !== 'add' &&
-        operation.oldLine === oldLines.length &&
-        !oldHasFinalNewline;
-      const newHasNoNewline =
-        operation.kind !== 'remove' &&
-        operation.newLine === newLines.length &&
-        !newHasFinalNewline;
+      const oldHasNoNewline = operation.kind !== 'add' && operation.oldLine === oldLines.length && !oldHasFinalNewline;
+      const newHasNoNewline = operation.kind !== 'remove' && operation.newLine === newLines.length && !newHasFinalNewline;
       if (oldHasNoNewline || newHasNoNewline) diffLines.push('\\ No newline at end of file');
     }
   }
@@ -567,9 +579,8 @@ function generateAddedDiff(filepath: string, content: string): string {
   const diffLines = ['--- /dev/null', '+++ b/' + filepath, '@@ -0,0 +'+ (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' @@'];
   for (let index = 0; index < lines.length; index++) {
     diffLines.push('+' + (lines[index] ?? ''));
-    if (index === lines.length - 1 && !content.endsWith('\n')) {
+    if (index === lines.length - 1 && !content.endsWith('\n'))
       diffLines.push('\\ No newline at end of file');
-    }
   }
   return diffLines.join('\n');
 }
@@ -875,8 +886,14 @@ export async function getStagedDiff(repoRoot: string): Promise<string> {
       if (!status) continue;
 
       if (status === 'deleted') {
-        const headContent = headOid ? await readBlobAtCommit(repoRoot, gitDir, headOid, filepath) : null;
-        diffs.push(headContent === null ? '# Binary file ' + filepath + ' deleted\n' : generateDeletedDiff(filepath, headContent));
+        const headContent = headOid
+          ? await readBlobAtCommit(repoRoot, gitDir, headOid, filepath)
+          : null;
+        diffs.push(
+          headContent === null
+            ? '# Binary file ' + filepath + ' deleted\n'
+            : generateDeletedDiff(filepath, headContent)
+        );
         continue;
       }
 
@@ -894,9 +911,11 @@ export async function getStagedDiff(repoRoot: string): Promise<string> {
       }
 
       const headContent = await readBlobAtCommit(repoRoot, gitDir, headOid, filepath);
-      diffs.push(headContent === null
-        ? '# Binary file ' + filepath + ' differs\n'
-        : generateUnifiedDiff(filepath, headContent, indexContent));
+      diffs.push(
+        headContent === null
+          ? '# Binary file ' + filepath + ' differs\n'
+          : generateUnifiedDiff(filepath, headContent, indexContent)
+      );
     }
 
     return diffs.join('\n');
