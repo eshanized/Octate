@@ -336,6 +336,10 @@ export function parseDetailedDiff(diff: string, defaultChangedFiles?: string[]):
         currentNewFile = path.normalize(raw.replace(/^[ab]\//, ''));
         if (currentOldFile === null || currentOldFile === '/dev/null') {
           currentStatus = 'added';
+        } else if (renames.get(currentOldFile) === currentNewFile) {
+          currentStatus = 'renamed';
+        } else {
+          currentStatus = 'modified';
         }
         const filePath = currentNewFile;
         changedFiles.add(filePath);
