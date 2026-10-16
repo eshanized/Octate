@@ -571,8 +571,14 @@ export function filterDiffToFiles(diff: string, filePaths: readonly string[]): s
     current = [];
   };
 
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('--- a/') || line === '--- /dev/null' || line.startsWith('# Binary')) {
+  const diffLines = diff.split('\n');
+  for (let index = 0; index < diffLines.length; index++) {
+    const line = diffLines[index] ?? '';
+    const nextLine = diffLines[index + 1];
+    const isFileHeader =
+      (line.startsWith('--- a/') || line === '--- /dev/null') &&
+      nextLine?.startsWith('+++ b/');
+    if (isFileHeader || line.startsWith('# Binary')) {
       flush();
     }
     current.push(line);
