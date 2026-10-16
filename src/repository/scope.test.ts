@@ -133,7 +133,7 @@ describe('resolveScope', () => {
       expect(scope.head).toBe(headOid);
       expect(scope.files).toEqual([{ path: 'README.md', status: 'added' }]);
       expect(scope.diff).toContain('+++ b/README.md');
-      expect(scope.diff).toContain('+ # Test Repo');
+      expect(scope.diff).toContain('+# Test Repo');
     });
 
     it('resolves commit scope', async () => {
