@@ -362,9 +362,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
                 oid: baseBlobOid,
               });
               const baseContent = decodeTextBlob(baseBlob.blob);
-              diff = baseContent === null
-                ? `# Binary file ${filepath} differs\n`
-                : generateUnifiedDiff(filepath, baseContent, headContent);
+              diff =
+                baseContent === null
+                  ? `# Binary file ${filepath} differs\n`
+                  : generateUnifiedDiff(filepath, baseContent, headContent);
             }
           } catch {
             // Binary file or read error
