@@ -113,8 +113,10 @@ export async function isBinaryFileFast(filePath: string): Promise<boolean> {
       const code = char.codePointAt(0);
       if (code === undefined) continue;
       measuredCharacters++;
-      if ((code < 32 && code !== 9 && code !== 10 && code !== 13) ||
-          (code >= 0x7f && code <= 0x9f)) {
+      if (
+        (code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+        (code >= 0x7f && code <= 0x9f)
+      ) {
         suspiciousControls++;
       }
     }
