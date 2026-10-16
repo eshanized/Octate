@@ -9,10 +9,10 @@ import { createGitError, createValidationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
 import type { FileChange, ReviewScope } from '../types/index.js';
 import {
+  EMPTY_TREE_BASE,
   findGitDir,
   getChangedFiles,
   getDiff,
-  getParentCommit,
   getStagedDiff,
   getWorkingDiff,
   resolveRef,
@@ -97,8 +97,16 @@ export async function resolveScope(options: ScopeOptions): Promise<ReviewScope> 
     case 'commit': {
       scopeType = 'commit';
       headRef = commit!;
-      // Get parent commit for base
-      baseRef = await getParentCommit(repoRoot, commit!);
+      const commitOid = await resolveRef(repoRoot, commit!);
+      const gitDir = await findGitDir(repoRoot);
+      const commitObject = await git.readCommit({
+        fs,
+        dir: repoRoot,
+        gitdir: gitDir,
+        oid: commitOid,
+      });
+      // The initial commit has no parent; compare its tree against the empty tree.
+      baseRef = commitObject.commit.parent[0] ?? EMPTY_TREE_BASE;
       diff = await getDiff(repoRoot, baseRef, headRef);
       files = await getChangedFiles(repoRoot, baseRef, headRef);
       break;
