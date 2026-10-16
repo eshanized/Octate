@@ -283,7 +283,7 @@ export class ReviewUseCase {
 
     const result = await engine.run({
       repoRoot,
-      diff: scope.diff,
+      diff: reviewDiff,
       changedFiles: filePaths,
       fileContents,
       reviewContext,
