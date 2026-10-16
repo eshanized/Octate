@@ -13,10 +13,16 @@ try {
   // Ignore if .env is missing or invalid
 }
 
+const allowedLogLevels = new Set<LogLevel>(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
+const configuredEnvLogLevel = process.env.LOG_LEVEL;
+if (configuredEnvLogLevel && allowedLogLevels.has(configuredEnvLogLevel as LogLevel)) {
+  setLogLevel(configuredEnvLogLevel as LogLevel);
+}
+
 import type { CancellationController } from './cancellation/index.js';
 import { registerCommands } from './commands/index.js';
 import { isOctateError } from './errors/index.js';
-import { createLogger } from './logging/index.js';
+import { createLogger, setLogLevel, type LogLevel } from './logging/index.js';
 import { OCTATE_VERSION } from './version.js';
 
 const logger = createLogger('cli');
@@ -48,7 +54,9 @@ export function createProgram(): Command {
       // Merge global options from parent commands
       const parentOpts = thisCommand.opts();
       const childOpts = actionCommand.opts();
-      Object.assign(actionCommand.opts(), { ...parentOpts, ...childOpts });
+      const mergedOpts = { ...parentOpts, ...childOpts };
+      Object.assign(actionCommand.opts(), mergedOpts);
+      _setupLogger(mergedOpts as GlobalOptions);
     });
 
   // Global options
@@ -71,11 +79,14 @@ export function createProgram(): Command {
  */
 function _setupLogger(options: GlobalOptions): void {
   const logLevel = options.debug ? 'debug' : options.logLevel;
-  if (logLevel) {
-    process.env.LOG_LEVEL = logLevel;
+  if (!logLevel) return;
+
+  if (!allowedLogLevels.has(logLevel)) {
+    throw new Error(`Invalid log level "${logLevel}". Choose one of: trace, debug, info, warn, error, fatal.`);
   }
-  // Recreate logger with new level
-  // Note: In a real implementation, we'd update the logger instance
+
+  process.env.LOG_LEVEL = logLevel;
+  setLogLevel(logLevel);
 }
 
 /**
