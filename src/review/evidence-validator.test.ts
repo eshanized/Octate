@@ -111,6 +111,25 @@ deleted file mode 100644
 -old code
 `;
 
+    it('resets path state between consecutive unified-diff sections', () => {
+      const diff = [
+        '--- a/src/first.ts',
+        '+++ b/src/first.ts',
+        '@@ -1,1 +1,1 @@',
+        '-before',
+        '+after',
+        '--- /dev/null',
+        '+++ b/src/new.ts',
+        '@@ -0,0 +1,1 @@',
+        '+new content',
+      ].join('\\n');
+
+      const parsed = parseDetailedDiff(diff);
+      expect(parsed.files.get('src/first.ts')?.status).toBe('modified');
+      expect(parsed.files.get('src/new.ts')?.status).toBe('added');
+      expect(parsed.files.get('src/new.ts')?.addedModifiedLines).toEqual([{ start: 1, end: 1 }]);
+    });
+
     it('extracts renames, deleted files, and added line intervals', () => {
       const parsed = parseDetailedDiff(sampleDiff);
       expect(parsed.renames.get('src/db/old-users.ts')).toBe('src/db/users.ts');
