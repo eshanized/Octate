@@ -191,14 +191,14 @@ describe('Git operations', () => {
   describe('getDiff', () => {
     it('separates distant edits into multiple hunks', async () => {
       const oldLines = Array.from({ length: 24 }, (_, index) => 'line ' + (index + 1));
-      await fs.writeFile(path.join(testDir, 'file1.ts'), oldLines.join('\\n') + '\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), oldLines.join('\n') + '\n');
       await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
       await git.commit({ fs, dir: testDir, message: 'Add long file' });
 
       const newLines = [...oldLines];
       newLines[1] = 'changed near start';
       newLines[21] = 'changed near end';
-      await fs.writeFile(path.join(testDir, 'file1.ts'), newLines.join('\\n') + '\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), newLines.join('\n') + '\n');
       await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
       await git.commit({ fs, dir: testDir, message: 'Change two distant lines' });
 
@@ -281,9 +281,9 @@ describe('Git operations', () => {
     });
 
     it('uses the index snapshot when working tree changes after staging', async () => {
-      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\n');
       await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
-      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\n');
 
       const stagedDiff = await getStagedDiff(testDir);
       const workingDiff = await getWorkingDiff(testDir);
@@ -296,7 +296,7 @@ describe('Git operations', () => {
     });
 
     it('counts final newlines without inventing an extra diff line', async () => {
-      await fs.writeFile(path.join(testDir, 'added-with-newline.txt'), 'single line\\n');
+      await fs.writeFile(path.join(testDir, 'added-with-newline.txt'), 'single line\n');
       await git.add({ fs, dir: testDir, filepath: 'added-with-newline.txt' });
 
       const diff = await getStagedDiff(testDir);
