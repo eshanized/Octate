@@ -50,6 +50,27 @@ describe('CacheStore', () => {
     expect(entry?.value).toEqual({ version: 2 });
   });
 
+  it('does not evict the key being replaced or undercount its size', async () => {
+    const smallStoreDir = resolve(TEST_DIR, `overwrite-${randomUUID()}`);
+    const smallStore = await createCacheStore({ rootDir: smallStoreDir, maxSize: 1200 });
+
+    await smallStore.set('first', 'a'.repeat(300));
+    await smallStore.set('second', 'b'.repeat(300));
+    await smallStore.set('first', 'c'.repeat(800));
+
+    const first = await smallStore.get<string>('first');
+    expect(first?.value).toBe('c'.repeat(800));
+    expect(await smallStore.has('second')).toBe(false);
+    expect(await smallStore.getSize()).toBeLessThanOrEqual(1200);
+  });
+
+  it('rejects a single entry larger than the cache capacity', async () => {
+    const smallStoreDir = resolve(TEST_DIR, `oversize-${randomUUID()}`);
+    const smallStore = await createCacheStore({ rootDir: smallStoreDir, maxSize: 128 });
+    await expect(smallStore.set('large', 'x'.repeat(500))).rejects.toThrow(RangeError);
+    expect(await smallStore.getSize()).toBe(0);
+  });
+
   it('deletes keys', async () => {
     await store.set('key1', 'value1');
     const deleted = await store.delete('key1');
