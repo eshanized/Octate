@@ -562,7 +562,7 @@ export function filterDiffToFiles(diff: string, filePaths: readonly string[]): s
   };
 
   for (const line of diff.split('\n')) {
-    if (/^--- (?:a\/|\/dev\/null)$/.test(line) || /^# Binary(?: file| or unresolved index entry) /.test(line)) {
+    if (line.startsWith('--- a/') || line === '--- /dev/null' || line.startsWith('# Binary')) {
       flush();
     }
     current.push(line);
