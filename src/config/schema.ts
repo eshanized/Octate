@@ -84,11 +84,6 @@ export type PartialOctateConfig = {
     | undefined;
   ignore?: string[] | undefined;
 };
-  review?: Partial<ReviewConfig>;
-  rules?: string[];
-  architecture?: { boundaries?: string[]; forbiddenDependencies?: string[] } | null;
-  ignore?: string[];
-};
 export type OctateConfig = z.infer<typeof OctateConfigSchema>;
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>;
 export type ArchitectureConfig = z.infer<typeof ArchitectureConfigSchema>;
