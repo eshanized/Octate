@@ -273,7 +273,7 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
-      getFileContent: async (file) => input.fileContents?.get(file) ?? null,
+      ...(evidenceFileReader ? { getFileContent: evidenceFileReader } : {}),
     });
 
     const gateResult = runDecisionGate(rankedFindings, postRankValidation.results, {
