@@ -103,11 +103,11 @@ export async function loadIgnorePatterns(
 
   // Always exclude critical directories regardless of config
   const criticalPatterns = [
-    '.git/**',
-    'node_modules/**',
-    'vendor/**',
-    'dist/**',
-    'build/**',
+    '**/.git/**',
+    '**/node_modules/**',
+    '**/vendor/**',
+    '**/dist/**',
+    '**/build/**',
     '*.log',
     '.DS_Store',
   ];
@@ -125,24 +125,35 @@ export async function createWorkspaceIgnoreMatcher(
   workspaceRoot: string,
   configPatterns: string[] = []
 ): Promise<IgnoreMatcher> {
-  // Start with root patterns
-  const matcher = await loadIgnorePatterns(repoRoot, configPatterns);
+  const rootMatcher = await loadIgnorePatterns(repoRoot, configPatterns);
+  const workspaceMatcher = createIgnoreMatcher();
 
-  // Add workspace-specific .gitignore if it exists
-  const workspaceGitIgnorePath = resolve(workspaceRoot, '.gitignore');
-  const workspaceGitIgnoreResult = await parseIgnoreFile(workspaceGitIgnorePath);
-  if (workspaceGitIgnoreResult.patterns.length > 0) {
-    matcher.add(workspaceGitIgnoreResult.patterns);
+  for (const filename of ['.gitignore', '.octateignore']) {
+    const result = await parseIgnoreFile(resolve(workspaceRoot, filename));
+    if (result.patterns.length > 0) workspaceMatcher.add(result.patterns);
   }
 
-  // Add workspace-specific .octateignore if it exists
-  const workspaceOctateIgnorePath = resolve(workspaceRoot, '.octateignore');
-  const workspaceOctateIgnoreResult = await parseIgnoreFile(workspaceOctateIgnorePath);
-  if (workspaceOctateIgnoreResult.patterns.length > 0) {
-    matcher.add(workspaceOctateIgnoreResult.patterns);
-  }
+  const workspaceRelativeRoot = normalizePathForIgnore(repoRoot, workspaceRoot).replace(/\/+$/, '');
+  const result: IgnoreMatcher = {
+    ignores: (filePath: string) => {
+      const normalized = normalizePathForIgnore(repoRoot, filePath);
+      if (rootMatcher.ignores(normalized)) return true;
 
-  return matcher;
+      if (!workspaceRelativeRoot || workspaceRelativeRoot === '.') return workspaceMatcher.ignores(normalized);
+      if (normalized === workspaceRelativeRoot) return false;
+      const prefix = workspaceRelativeRoot + '/';
+      if (!normalized.startsWith(prefix)) return false;
+
+      return workspaceMatcher.ignores(normalized.slice(prefix.length));
+    },
+    add: (patterns: string | string[]) => {
+      rootMatcher.add(patterns);
+      return result;
+    },
+    createFilter: () => (filePath: string) => !result.ignores(filePath),
+  };
+
+  return result;
 }
 
 /**
