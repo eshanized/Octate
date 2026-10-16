@@ -161,8 +161,8 @@ describe('ignore', () => {
     it('scopes slash-anchored workspace patterns to that workspace', async () => {
       const workspaceRoot = join(repoRoot, 'packages', 'app');
       await mkdir(workspaceRoot, { recursive: true });
-      await writeFile(join(workspaceRoot, '.gitignore'), 'src/generated/\\n');
-      await writeFile(join(workspaceRoot, '.octateignore'), '*.workspace-log\\n');
+      await writeFile(join(workspaceRoot, '.gitignore'), 'src/generated/\n');
+      await writeFile(join(workspaceRoot, '.octateignore'), '*.workspace-log\n');
 
       const matcher = await createWorkspaceIgnoreMatcher(repoRoot, workspaceRoot);
 
