@@ -35,7 +35,7 @@ describe('filterDiffToFiles', () => {
       '+++ b/src/added.ts',
       '@@ -0,0 +1,1 @@',
       '+added',
-    ].join('\\n');
+    ].join('\n');
 
     expect(filterDiffToFiles(diff, ['src/app.ts', 'src/added.ts'])).toContain('+++ b/src/app.ts');
     expect(filterDiffToFiles(diff, ['src/app.ts', 'src/added.ts'])).toContain('+++ b/src/added.ts');
@@ -49,7 +49,7 @@ describe('filterDiffToFiles', () => {
       '@@ -1,1 +0,0 @@',
       '-deleted',
       '# Binary file assets/logo.png differs',
-    ].join('\\n');
+    ].join('\n');
     const selected = filterDiffToFiles(diff, ['src/deleted.ts', 'assets/logo.png']);
     expect(selected).toContain('src/deleted.ts');
     expect(selected).toContain('# Binary file assets/logo.png differs');
@@ -90,7 +90,7 @@ describe('Git operations', () => {
     it('normalizes repository-relative paths and rejects traversal', async () => {
       await expect(
         readFileAtReviewScope(testDir, 'working-tree', 'WORKDIR', './README.md')
-      ).resolves.toBe('# Test Repo\\n');
+      ).resolves.toBe('# Test Repo\n');
 
       await expect(
         readFileAtReviewScope(testDir, 'working-tree', 'WORKDIR', '../../etc/passwd')
@@ -98,13 +98,13 @@ describe('Git operations', () => {
     });
 
     it('reads staged content rather than later working-tree edits', async () => {
-      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\n');
       await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
-      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\\n');
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\n');
 
       await expect(
         readFileAtReviewScope(testDir, 'staged', 'INDEX', 'file1.ts')
-      ).resolves.toBe('export const a = 2;\\n');
+      ).resolves.toBe('export const a = 2;\n');
     });
   });
 
