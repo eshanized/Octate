@@ -11,7 +11,7 @@ import type { AbortSignalLike } from '../model/types.js';
  */
 export class CancellationController {
   private abortController: AbortController;
-  private childSignals: AbortSignal[] = [];
+  private childControllers: Array<{ controller: AbortController; onParentAbort: () => void }> = [];
 
   constructor() {
     this.abortController = new AbortController();
@@ -38,16 +38,15 @@ export class CancellationController {
   createChildSignal(): AbortSignal {
     const childController = new AbortController();
 
-    // When parent aborts, abort the child
+    // When the parent aborts, propagate its reason to the child.
     if (this.abortController.signal.aborted) {
       childController.abort(this.abortController.signal.reason);
-    } else {
-      this.abortController.signal.addEventListener('abort', () => {
-        childController.abort(this.abortController.signal.reason);
-      });
+      return childController.signal;
     }
 
-    this.childSignals.push(childController.signal);
+    const onParentAbort = () => childController.abort(this.abortController.signal.reason);
+    this.abortController.signal.addEventListener('abort', onParentAbort, { once: true });
+    this.childControllers.push({ controller: childController, onParentAbort });
     return childController.signal;
   }
 
@@ -56,9 +55,13 @@ export class CancellationController {
    */
   abort(reason?: unknown): void {
     this.abortController.abort(reason);
-    for (const childSignal of this.childSignals) {
-      // The child signals are aborted automatically via event listener
+    for (const child of this.childControllers) {
+      this.abortController.signal.removeEventListener('abort', child.onParentAbort);
+      if (!child.controller.signal.aborted) {
+        child.controller.abort(this.abortController.signal.reason);
+      }
     }
+    this.childControllers = [];
   }
 
   /**
@@ -96,9 +99,13 @@ export function createCancellationController(parentSignal?: AbortSignal): Cancel
     if (parentSignal.aborted) {
       controller.abort(parentSignal.reason);
     } else {
-      parentSignal.addEventListener('abort', () => {
-        controller.abort(parentSignal.reason);
-      });
+      const onParentAbort = () => controller.abort(parentSignal.reason);
+      parentSignal.addEventListener('abort', onParentAbort, { once: true });
+      controller.signal.addEventListener(
+        'abort',
+        () => parentSignal.removeEventListener('abort', onParentAbort),
+        { once: true }
+      );
     }
   }
 
