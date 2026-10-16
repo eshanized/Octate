@@ -30,15 +30,28 @@ export async function findGitRoot(startDir: string = process.cwd()): Promise<str
     const gitDir = path.join(currentDir, '.git');
     try {
       const stat = await fs.stat(gitDir);
-      if (stat.isDirectory() || stat.isFile()) {
-        // Verify it's a valid git directory by checking for HEAD
-        const headPath = path.join(gitDir, 'HEAD');
+      if (stat.isDirectory()) {
+        // A normal repository stores HEAD directly in its .git directory.
         try {
-          await fs.access(headPath);
+          await fs.access(path.join(gitDir, 'HEAD'));
           logger.debug({ gitRoot: currentDir }, 'Found Git repository root');
           return currentDir;
         } catch {
-          // HEAD doesn't exist, continue searching
+          // Not a valid Git directory; continue searching.
+        }
+      } else if (stat.isFile()) {
+        // Linked worktrees and submodules use a .git file pointing to gitdir.
+        try {
+          const pointer = (await fs.readFile(gitDir, 'utf-8')).trim();
+          const match = /^gitdir:\s*(.+)$/i.exec(pointer);
+          if (match?.[1]) {
+            const resolvedGitDir = path.resolve(currentDir, match[1]);
+            await fs.access(path.join(resolvedGitDir, 'HEAD'));
+            logger.debug({ gitRoot: currentDir, gitDir: resolvedGitDir }, 'Found Git worktree root');
+            return currentDir;
+          }
+        } catch {
+          // Invalid pointer or inaccessible git directory; continue searching.
         }
       }
     } catch {
