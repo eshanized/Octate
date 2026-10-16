@@ -14,6 +14,7 @@ import {
   getStagedDiff,
   getStatus,
   getWorkingDiff,
+  readFileAtReviewScope,
   resolveRef,
 } from './git.js';
 
@@ -83,6 +84,28 @@ describe('Git operations', () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     await fs.rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('readFileAtReviewScope', () => {
+    it('normalizes repository-relative paths and rejects traversal', async () => {
+      await expect(
+        readFileAtReviewScope(testDir, 'working-tree', 'WORKDIR', './README.md')
+      ).resolves.toBe('# Test Repo\\n');
+
+      await expect(
+        readFileAtReviewScope(testDir, 'working-tree', 'WORKDIR', '../../etc/passwd')
+      ).resolves.toBeNull();
+    });
+
+    it('reads staged content rather than later working-tree edits', async () => {
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\\n');
+      await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\\n');
+
+      await expect(
+        readFileAtReviewScope(testDir, 'staged', 'INDEX', 'file1.ts')
+      ).resolves.toBe('export const a = 2;\\n');
+    });
   });
 
   describe('resolveRef', () => {
