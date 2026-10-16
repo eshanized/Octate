@@ -49,10 +49,15 @@ describe('filterDiffToFiles', () => {
       '@@ -1,1 +0,0 @@',
       '-deleted',
       '# Binary file assets/logo.png differs',
+      '--- a/src/ignored-deleted.ts',
+      '+++ /dev/null',
+      '@@ -1,1 +0,0 @@',
+      '-ignored',
     ].join('\n');
     const selected = filterDiffToFiles(diff, ['src/deleted.ts', 'assets/logo.png']);
     expect(selected).toContain('src/deleted.ts');
     expect(selected).toContain('# Binary file assets/logo.png differs');
+    expect(selected).not.toContain('src/ignored-deleted.ts');
     expect(filterDiffToFiles(diff, [])).toBe('');
   });
 });
