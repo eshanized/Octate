@@ -10,7 +10,7 @@ import { GitIndexManager } from 'isomorphic-git/managers';
 import { FileSystem } from 'isomorphic-git/models';
 import { createGitError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
-import type { FileChange } from '../types/index.js';
+import type { FileChange, ReviewScope } from '../types/index.js';
 
 const logger = createLogger('repository:git');
 
@@ -645,7 +645,7 @@ async function readBlobAtCommit(
       oid: commitOid,
       filepath,
     });
-    return Buffer.from(blob.blob).toString('utf-8');
+    return decodeTextBlob(blob.blob);
   } catch {
     return null;
   }
@@ -685,6 +685,40 @@ function decodeTextBlob(bytes: Uint8Array): string | null {
   if (bytes.includes(0)) return null;
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads a changed file from the exact target snapshot of a review scope.
+ * This keeps staged and historical reviews aligned with the diff being reviewed.
+ */
+export async function readFileAtReviewScope(
+  repoRoot: string,
+  scopeType: ReviewScope['type'],
+  headRef: string,
+  filepath: string
+): Promise<string | null> {
+  if (scopeType === 'working-tree') {
+    try {
+      return decodeTextBlob(await fs.readFile(path.join(repoRoot, filepath)));
+    } catch {
+      return null;
+    }
+  }
+
+  const gitDir = await findGitDir(repoRoot);
+  if (scopeType === 'staged') {
+    const oid = (await readIndexOids(gitDir)).get(filepath);
+    if (!oid) return null;
+    const blob = await readBlobAtOid(repoRoot, gitDir, oid);
+    return blob ? decodeTextBlob(blob) : null;
+  }
+
+  try {
+    const commitOid = await resolveRef(repoRoot, headRef);
+    return await readBlobAtCommit(repoRoot, gitDir, commitOid, filepath);
   } catch {
     return null;
   }
