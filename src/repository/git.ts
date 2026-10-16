@@ -655,7 +655,7 @@ async function readBlobAtCommit(
  * Reads the stage-0 blob OIDs from the Git index. Reading the object by OID
  * avoids accidentally using the working-tree contents for staged changes.
  */
-async function readIndexOids(repoRoot: string, gitDir: string): Promise<Map<string, string>> {
+async function readIndexOids(gitDir: string): Promise<Map<string, string>> {
   const entries = await GitIndexManager.acquire(
     { fs: indexFs, gitdir: gitDir, cache: {} },
     (index) =>
@@ -707,7 +707,7 @@ export async function getStagedDiff(repoRoot: string): Promise<string> {
     }
 
     const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
-    const indexOids = await readIndexOids(repoRoot, gitDir);
+    const indexOids = await readIndexOids(gitDir);
     const diffs: string[] = [];
 
     for (const entry of matrix) {
