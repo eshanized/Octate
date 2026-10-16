@@ -5,12 +5,8 @@
 
 import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { Ignore } from 'ignore';
 import ignore from 'ignore';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 /**
  * Represents a compiled ignore pattern matcher.
@@ -38,10 +34,12 @@ export interface IgnoreParseResult {
 export async function parseIgnoreFile(filePath: string): Promise<IgnoreParseResult> {
   try {
     const content = await readFile(filePath, 'utf-8');
-    const lines = content.split('\n');
-    const patterns = lines
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith('#'));
+    const lines = content.split('\n').map((line) => line.endsWith('\r') ? line.slice(0, -1) : line);
+    // Preserve escaped trailing spaces and other Git ignore syntax; trimming patterns
+    // changes their meaning (for example, "file\\ " matches a name ending in a space).
+    const patterns = lines.filter(
+      (line) => line.length > 0 && line.trim().length > 0 && !line.startsWith('#')
+    );
     return { patterns, filePath };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
