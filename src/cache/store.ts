@@ -4,7 +4,17 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { access, mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rmdir,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DiagnosticCollection } from '../analysis/diagnostics/index.js';
 import type { Diagnostic } from '../model/types.js';
@@ -246,7 +256,9 @@ export class CacheStore {
     const evictableEntries = entries.filter((entry) => entry.path !== protectedPath);
     const reclaimableSize = evictableEntries.reduce((total, entry) => total + entry.size, 0);
     if (this.currentSize + requiredSize - reclaimableSize > this.maxSize) {
-      throw new RangeError('Cache capacity exceeded; the new entry cannot fit without evicting the protected entry');
+      throw new RangeError(
+        'Cache capacity exceeded; the new entry cannot fit without evicting the protected entry'
+      );
     }
 
     // Evict oldest entries until we have enough space.
