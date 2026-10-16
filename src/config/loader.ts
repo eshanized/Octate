@@ -4,7 +4,13 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
-import { DefaultConfig, type OctateConfig, OctateConfigSchema } from './schema.js';
+import {
+  DefaultConfig,
+  type OctateConfig,
+  type PartialOctateConfig,
+  OctateConfigSchema,
+  PartialOctateConfigSchema,
+} from './schema.js';
 
 const logger = createLogger('config:loader');
 
@@ -39,6 +45,32 @@ export async function findConfigFile(startDir: string = process.cwd()): Promise<
  * Returns the parsed config or DefaultConfig if file doesn't exist.
  * Throws ConfigurationError if file exists but is invalid.
  */
+/**
+ * Loads a project config without materializing schema defaults.
+ * This form is used for precedence merging so omitted values don't override
+ * explicit values from the global configuration.
+ */
+export async function loadProjectConfigLayer(
+  configPath?: string
+): Promise<PartialOctateConfig> {
+  const filePath = configPath ?? (await findConfigFile());
+  if (!filePath) return {};
+
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    return PartialOctateConfigSchema.parse(parse(content));
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const issues = error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+      throw new ConfigurationError(`Invalid octate.yaml: ${issues}`, { filePath, issues });
+    }
+    throw new ConfigurationError(
+      `Failed to load config from ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      { filePath }
+    );
+  }
+}
+
 export async function loadProjectConfig(configPath?: string): Promise<OctateConfig> {
   const filePath = configPath ?? (await findConfigFile());
 
@@ -65,6 +97,32 @@ export async function loadProjectConfig(configPath?: string): Promise<OctateConf
     throw new ConfigurationError(
       `Failed to load config from ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
       { filePath }
+    );
+  }
+}
+
+/**
+ * Loads the global config as an explicit-only layer, without defaults.
+ * Invalid files are surfaced to loadConfig instead of being silently ignored.
+ */
+export async function loadGlobalConfigLayer(): Promise<PartialOctateConfig> {
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE;
+  if (!homeDir) return {};
+
+  const configDir = process.env.XDG_CONFIG_HOME ?? join(homeDir, '.config');
+  const configPath = join(configDir, 'octate', 'config.yaml');
+  try {
+    const content = await readFile(configPath, 'utf-8');
+    return PartialOctateConfigSchema.parse(parse(content));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    if (error instanceof z.ZodError) {
+      const issues = error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+      throw new ConfigurationError(`Invalid global config: ${issues}`, { filePath: configPath, issues });
+    }
+    throw new ConfigurationError(
+      `Failed to load global config from ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      { filePath: configPath }
     );
   }
 }
