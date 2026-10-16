@@ -115,12 +115,23 @@ export class CacheStore {
 
     const serialized = JSON.stringify(entry);
 
-    // Check if we need to evict before writing
-    await this.ensureSpace(entry.size);
-
     const filePath = this.keyToFilePath(key);
     const dir = dirname(filePath);
     await mkdir(dir, { recursive: true });
+
+    // Replacing a key consumes only the size delta, not another full entry.
+    let previousSize = 0;
+    try {
+      previousSize = (await stat(filePath)).size;
+    } catch {
+      // This key does not exist yet.
+    }
+
+    if (entry.size > this.maxSize) {
+      throw new RangeError(`Cache entry exceeds maximum cache size (${entry.size} > ${this.maxSize} bytes)`);
+    }
+
+    await this.ensureSpace(Math.max(0, entry.size - previousSize));
 
     // Atomic write: write to temp file, then rename
     const tempPath = `${filePath}.tmp.${createHash('sha256')
@@ -131,7 +142,7 @@ export class CacheStore {
     try {
       await writeFile(tempPath, serialized, 'utf-8');
       await rename(tempPath, filePath);
-      this.currentSize += entry.size;
+      this.currentSize = Math.max(0, this.currentSize - previousSize + (await stat(filePath)).size);
     } catch (error) {
       // Clean up temp file on error
       try {
