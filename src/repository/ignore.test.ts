@@ -147,6 +147,8 @@ describe('ignore', () => {
 
       expect(matcher.ignores('.git/config')).toBe(true);
       expect(matcher.ignores('node_modules/foo/package.json')).toBe(true);
+      expect(matcher.ignores('packages/example/node_modules/foo/package.json')).toBe(true);
+      expect(matcher.ignores('packages/example/dist/chunk.js')).toBe(true);
       expect(matcher.ignores('vendor/lib.js')).toBe(true);
       expect(matcher.ignores('dist/main.js')).toBe(true);
       expect(matcher.ignores('build/output.js')).toBe(true);
@@ -156,6 +158,20 @@ describe('ignore', () => {
   });
 
   describe('createWorkspaceIgnoreMatcher', () => {
+    it('scopes slash-anchored workspace patterns to that workspace', async () => {
+      const workspaceRoot = join(repoRoot, 'packages', 'app');
+      await mkdir(workspaceRoot, { recursive: true });
+      await writeFile(join(workspaceRoot, '.gitignore'), 'src/generated/\\n');
+      await writeFile(join(workspaceRoot, '.octateignore'), '*.workspace-log\\n');
+
+      const matcher = await createWorkspaceIgnoreMatcher(repoRoot, workspaceRoot);
+
+      expect(matcher.ignores('packages/app/src/generated/client.ts')).toBe(true);
+      expect(matcher.ignores('other/src/generated/client.ts')).toBe(false);
+      expect(matcher.ignores('packages/app/deep/server.workspace-log')).toBe(true);
+      expect(matcher.ignores('other/server.workspace-log')).toBe(false);
+    });
+
     it('unions root and workspace patterns', async () => {
       await writeFile(join(repoRoot, '.gitignore'), 'node_modules/\n');
       await writeFile(join(repoRoot, '.octateignore'), '*.root.tmp\n');
