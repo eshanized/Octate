@@ -797,7 +797,7 @@ export async function getWorkingDiff(repoRoot: string): Promise<string> {
   try {
     const gitDir = await findGitDir(repoRoot);
     const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
-    const indexOids = await readIndexOids(repoRoot, gitDir);
+    const indexOids = await readIndexOids(gitDir);
     const diffs: string[] = [];
 
     for (const entry of matrix) {
