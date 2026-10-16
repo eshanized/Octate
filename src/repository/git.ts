@@ -547,6 +547,44 @@ function generateDeletedDiff(filepath: string, content: string): string {
 }
 
 /**
+ * Keeps only unified-diff file sections whose paths passed repository filtering.
+ * Supports added/deleted files and the binary placeholders emitted by this module.
+ */
+export function filterDiffToFiles(diff: string, filePaths: readonly string[]): string {
+  const included = new Set(filePaths.map((file) => file.replace(/\\/g, '/')));
+  if (included.size === 0 || !diff) return '';
+
+  const sections: string[][] = [];
+  let current: string[] = [];
+  const flush = () => {
+    if (current.length > 0) sections.push(current);
+    current = [];
+  };
+
+  for (const line of diff.split('\n')) {
+    if (/^--- (?:a\/|\/dev\/null)$/.test(line) || /^# Binary(?: file| or unresolved index entry) /.test(line)) {
+      flush();
+    }
+    current.push(line);
+  }
+  flush();
+
+  const kept: string[] = [];
+  for (const section of sections) {
+    const addedPath = section.find((line) => line.startsWith('+++ b/'))?.slice(6);
+    const deletedPath = section.find((line) => line.startsWith('--- a/'))?.slice(6);
+    const binaryLine = section.find((line) => line.startsWith('# Binary'));
+    const binaryMatch = binaryLine
+      ? /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/.exec(binaryLine)
+      : null;
+    const filePath = (addedPath ?? deletedPath ?? binaryMatch?.[1])?.replace(/\\/g, '/');
+    if (filePath && included.has(filePath)) kept.push(...section);
+  }
+
+  return kept.join('\n');
+}
+
+/**
  * Gets changed files with their status between two refs.
  *
  * @param repoRoot - Repository root directory
