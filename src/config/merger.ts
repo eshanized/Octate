@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
-import { loadGlobalConfig, loadProjectConfig } from './loader.js';
-import { DefaultConfig, type OctateConfig, OctateConfigSchema } from './schema.js';
+import { loadGlobalConfigLayer, loadProjectConfigLayer } from './loader.js';
+import {
+  DefaultConfig,
+  type OctateConfig,
+  type PartialOctateConfig,
+  OctateConfigSchema,
+} from './schema.js';
 
 const logger = createLogger('config:merger');
 
@@ -64,15 +69,15 @@ export type DeepPartial<T> = {
  */
 export function mergeConfigs(
   defaults: OctateConfig,
-  global: OctateConfig,
-  project: OctateConfig,
+  global: PartialOctateConfig,
+  project: PartialOctateConfig,
   env: DeepPartial<OctateConfig>,
   cli: DeepPartial<OctateConfig>
 ): OctateConfig {
   logger.debug(
     {
-      hasGlobal: global !== DefaultConfig,
-      hasProject: project !== DefaultConfig,
+      hasGlobal: Object.keys(global).length > 0,
+      hasProject: Object.keys(project).length > 0,
       envKeys: Object.keys(env),
       cliKeys: Object.keys(cli),
     },
@@ -101,7 +106,7 @@ export function mergeConfigs(
             result[key] as Record<string, unknown>,
             value as Record<string, unknown>
           );
-        } else if (value !== undefined && value !== null) {
+        } else if (value !== undefined) {
           (result as Record<string, unknown>)[key] = value;
         }
       }
@@ -136,8 +141,8 @@ export function mergeConfigs(
  */
 export interface ConfigMergerOptions {
   configPath?: string | undefined;
-  projectConfig?: OctateConfig;
-  globalConfig?: OctateConfig;
+  projectConfig?: PartialOctateConfig;
+  globalConfig?: PartialOctateConfig;
   envConfig?: DeepPartial<OctateConfig>;
   cliConfig?: DeepPartial<OctateConfig>;
 }
@@ -145,8 +150,8 @@ export interface ConfigMergerOptions {
 export async function loadConfig(options: ConfigMergerOptions = {}): Promise<OctateConfig> {
   const {
     configPath,
-    projectConfig = await loadProjectConfig(configPath),
-    globalConfig = await loadGlobalConfig(),
+    projectConfig = await loadProjectConfigLayer(configPath),
+    globalConfig = await loadGlobalConfigLayer(),
     envConfig = parseEnvConfig(),
     cliConfig = {},
   } = options;
