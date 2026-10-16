@@ -90,7 +90,7 @@ export interface ReviewOptions {
 /**
  * Validates that at most one scope option is provided.
  */
-export function validateScope(options: ReviewOptions): void {
+export function validateScope(options: ReviewOptions, refs: string[] = []): void {
   const scopes = [
     options.staged,
     options.working,
@@ -103,6 +103,13 @@ export function validateScope(options: ReviewOptions): void {
     throw new ConfigurationError(
       'Multiple scopes specified. Use exactly one of: --staged, --working, --commit, --range, --branch'
     );
+  }
+
+  if (refs.length > 1) {
+    throw new ConfigurationError('Only one positional ref or range may be provided.');
+  }
+  if (refs.length === 1 && scopes > 0) {
+    throw new ConfigurationError('Positional refs cannot be combined with explicit scope options.');
   }
 }
 
@@ -181,7 +188,7 @@ export async function runReview(
 
   try {
     // Validate scope and output options
-    validateScope(options);
+    validateScope(options, refs);
     validateOutputMode(options);
 
     // Find Git repository root
