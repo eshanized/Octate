@@ -16,6 +16,9 @@ const logger = createLogger('repository:git');
 
 // Use Node.js fs promises as the filesystem adapter
 const fsAdapter = fs;
+
+/** Internal sentinel that means compare a root commit against an empty tree. */
+export const EMPTY_TREE_BASE = 'octate::empty-tree';
 const indexFs = new FileSystem(fsAdapter);
 
 /**
@@ -287,25 +290,26 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
   try {
     const gitDir = await findGitDir(repoRoot);
 
-    // Resolve refs to commit OIDs
-    const baseOid = await resolveRef(repoRoot, base);
+    // A root commit has no parent commit, so compare it to a real empty tree object.
+    const baseOid = base === EMPTY_TREE_BASE ? null : await resolveRef(repoRoot, base);
     const headOid = await resolveRef(repoRoot, head);
 
-    // Get the tree OIDs for both commits
-    const baseCommit = await git.readCommit({
-      fs: fsAdapter,
-      dir: repoRoot,
-      gitdir: gitDir,
-      oid: baseOid,
-    });
+    const baseTreeOid = baseOid
+      ? (
+          await git.readCommit({
+            fs: fsAdapter,
+            dir: repoRoot,
+            gitdir: gitDir,
+            oid: baseOid,
+          })
+        ).commit.tree
+      : await git.writeTree({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir, tree: [] });
     const headCommit = await git.readCommit({
       fs: fsAdapter,
       dir: repoRoot,
       gitdir: gitDir,
       oid: headOid,
     });
-
-    const baseTreeOid = baseCommit.commit.tree;
     const headTreeOid = headCommit.commit.tree;
 
     // Use walk to generate diff
@@ -605,23 +609,25 @@ export async function getChangedFiles(
 ): Promise<FileChange[]> {
   try {
     const gitDir = await findGitDir(repoRoot);
-    const baseOid = await resolveRef(repoRoot, base);
+    const baseOid = base === EMPTY_TREE_BASE ? null : await resolveRef(repoRoot, base);
     const headOid = await resolveRef(repoRoot, head);
 
-    const baseCommit = await git.readCommit({
-      fs: fsAdapter,
-      dir: repoRoot,
-      gitdir: gitDir,
-      oid: baseOid,
-    });
+    const baseTreeOid = baseOid
+      ? (
+          await git.readCommit({
+            fs: fsAdapter,
+            dir: repoRoot,
+            gitdir: gitDir,
+            oid: baseOid,
+          })
+        ).commit.tree
+      : await git.writeTree({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir, tree: [] });
     const headCommit = await git.readCommit({
       fs: fsAdapter,
       dir: repoRoot,
       gitdir: gitDir,
       oid: headOid,
     });
-
-    const baseTreeOid = baseCommit.commit.tree;
     const headTreeOid = headCommit.commit.tree;
 
     const changes: FileChange[] = [];
