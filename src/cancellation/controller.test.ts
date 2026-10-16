@@ -78,6 +78,16 @@ describe('createCancellationController', () => {
     expect(controller.signal.reason).toBe('parent reason');
   });
 
+  it('removes the parent abort listener when the child controller is disposed by aborting', () => {
+    const parentController = new AbortController();
+    const removeListener = jest.spyOn(parentController.signal, 'removeEventListener');
+    const controller = createCancellationController(parentController.signal);
+
+    controller.abort('finished');
+
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
   it('immediately aborts if parent already aborted', () => {
     const parentController = new AbortController();
     parentController.abort('already aborted');
