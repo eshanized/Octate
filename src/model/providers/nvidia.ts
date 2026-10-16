@@ -30,6 +30,8 @@ export interface LocalNvidiaProviderOptions {
   repoRoot?: string | undefined;
   /** Exact contents for files in the reviewed snapshot, when available. */
   fileContents?: ReadonlyMap<string, string> | undefined;
+  /** Reads any file from the exact Git/worktree snapshot being reviewed. */
+  readFileAtScope?: ((file: string) => Promise<string | null>) | undefined;
 }
 
 interface NvidiaChatChoice {
@@ -274,6 +276,11 @@ export class LocalNvidiaProvider implements ReviewModel {
         const snapshotContent = this.options.fileContents?.get(file);
         if (snapshotContent !== undefined) {
           return countTextLines(snapshotContent);
+        }
+
+        if (this.options.readFileAtScope) {
+          const scopedContent = await this.options.readFileAtScope(file);
+          return scopedContent === null ? 0 : countTextLines(scopedContent);
         }
 
         try {
