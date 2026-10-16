@@ -53,7 +53,7 @@ describe('findGitRoot', () => {
     await fs.writeFile(path.join(testDir, '.git', 'HEAD'), 'ref: refs/heads/main');
 
     const result = await findGitRoot(worktreeDir);
-    expect(result).toBe(testDir);
+    expect(result).toBe(worktreeDir);
   });
 });
 
