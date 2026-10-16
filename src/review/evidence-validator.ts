@@ -411,6 +411,16 @@ function intervalsOverlap(
 }
 
 /**
+ * Counts logical text lines, excluding the empty segment after a final newline.
+ */
+function countTextLines(content: string): number {
+  if (content.length === 0) return 0;
+  const lines = content.split('\\n');
+  if (content.endsWith('\\n')) lines.pop();
+  return lines.length;
+}
+
+/**
  * Resolves file line count using options callbacks or filesystem.
  */
 async function resolveLineCount(
