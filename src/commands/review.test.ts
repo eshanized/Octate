@@ -170,6 +170,16 @@ describe('commands:review', () => {
       expect(() => validateScope({ branch: 'feat' })).not.toThrow();
     });
 
+    it('rejects multiple positional refs and mixing positional refs with flags', () => {
+      expect(() => validateScope({}, ['HEAD', 'main'])).toThrow('Only one positional ref');
+      expect(() => validateScope({ staged: true }, ['HEAD'])).toThrow(
+        'Positional refs cannot be combined'
+      );
+      expect(() => validateScope({ range: 'main..HEAD' }, ['HEAD'])).toThrow(
+        'Positional refs cannot be combined'
+      );
+    });
+
     it('rejects when conflicting scope flags are specified', () => {
       expect(() => validateScope({ staged: true, working: true })).toThrow(ConfigurationError);
       expect(() => validateScope({ staged: true, commit: 'abc' })).toThrow(
