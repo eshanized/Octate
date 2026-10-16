@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as git from 'isomorphic-git';
+import { EMPTY_TREE_BASE } from './git.js';
 import { parseRange, resolveScope, validateRef } from './scope.js';
 
 describe('parseRange', () => {
@@ -121,6 +122,20 @@ describe('resolveScope', () => {
   });
 
   describe('--commit', () => {
+    it('resolves the initial commit against an empty tree', async () => {
+      const scope = await resolveScope({
+        type: 'commit',
+        repoRoot: testDir,
+        commit: headOid,
+      });
+
+      expect(scope.base).toBe(EMPTY_TREE_BASE);
+      expect(scope.head).toBe(headOid);
+      expect(scope.files).toEqual([{ path: 'README.md', status: 'added' }]);
+      expect(scope.diff).toContain('+++ b/README.md');
+      expect(scope.diff).toContain('+ # Test Repo');
+    });
+
     it('resolves commit scope', async () => {
       const scope = await resolveScope({
         type: 'commit',
