@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import process from 'node:process';
 import { AuthenticationError, ValidationError } from '../../errors/index.js';
 import { serializePromptContext } from '../../intelligence/context/serializer.js';
@@ -26,6 +28,8 @@ export interface LocalNvidiaProviderOptions {
   modelId?: string | undefined;
   endpointUrl?: string | undefined;
   repoRoot?: string | undefined;
+  /** Exact contents for files in the reviewed snapshot, when available. */
+  fileContents?: ReadonlyMap<string, string> | undefined;
 }
 
 interface NvidiaChatChoice {
@@ -46,6 +50,13 @@ interface NvidiaChatCompletionResponse {
     total_tokens?: number;
   };
   model?: string;
+}
+
+function countTextLines(content: string): number {
+  if (content.length === 0) return 0;
+  const lines = content.split('\\n');
+  if (content.endsWith('\\n')) lines.pop();
+  return lines.length;
 }
 
 function determineRole(reviewTask?: string): string {
@@ -259,6 +270,21 @@ export class LocalNvidiaProvider implements ReviewModel {
 
     const groundedFindings = await groundFindings(validatedFindings ?? [], {
       repoRoot: this.repoRoot,
+      getFileLineCount: async (file) => {
+        const snapshotContent = this.options.fileContents?.get(file);
+        if (snapshotContent !== undefined) {
+          return countTextLines(snapshotContent);
+        }
+
+        try {
+          const bytes = await readFile(path.resolve(this.repoRoot, file));
+          const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          return countTextLines(content);
+        } catch {
+          // A missing, binary, or unreadable file cannot ground a finding.
+          return 0;
+        }
+      },
     });
 
     const latencyMs = Math.round(performance.now() - startTime);
