@@ -19,7 +19,8 @@ import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
 import { findGitRoot } from '../repository/discovery.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
-import { readFileAtReviewScope } from '../repository/git.js';
+import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
+import { createFileFilter } from '../repository/filter.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
 import { OCTATE_VERSION } from '../version.js';
@@ -120,8 +121,61 @@ export class ReviewUseCase {
       };
     }
 
-    const filePaths = scope.files.map((f) => f.path);
     const config = options.config ?? (await loadConfig({}));
+    const fileFilter = await createFileFilter(repoRoot, {
+      additionalIgnorePatterns: config.ignore,
+    });
+    const shouldIncludeFile = fileFilter.createFilter();
+    const filePaths = scope.files
+      .map((file) => file.path)
+      .filter((filePath) => shouldIncludeFile(filePath));
+    const reviewDiff = filterDiffToFiles(scope.diff, filePaths);
+
+    // An ignore rule can remove every changed file from a non-empty Git scope.
+    // Return a normal empty result instead of calling parsers or the model.
+    if (filePaths.length === 0 || !reviewDiff.trim()) {
+      const durationMs = Date.now() - startTime;
+      const modelName =
+        (options.modelOverride as { modelName?: string } | undefined)?.modelName ??
+        (options.modelOverride as { modelId?: string } | undefined)?.modelId ??
+        'none';
+      return {
+        summary: {
+          totalFindings: 0,
+          bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+          byCategory: {
+            correctness: 0,
+            security: 0,
+            performance: 0,
+            architecture: 0,
+            reliability: 0,
+            maintainability: 0,
+            compatibility: 0,
+            testing: 0,
+          },
+          byReviewer: {},
+          filesAnalyzed: 0,
+          durationMs,
+        },
+        findings: [],
+        metadata: {
+          scopeType: scope.type,
+          base: scope.base,
+          head: scope.head,
+          timestamp: new Date().toISOString(),
+          version: OCTATE_VERSION,
+          model: modelName,
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          warnings: [],
+          reviewersTriggered: [],
+          criticInvoked: false,
+          preCriticFindingCount: 0,
+          postCriticFindingCount: 0,
+        },
+      };
+    }
 
     // Read file contents for subsequent analysis and intelligence stages
     const fileContents = new Map<string, string>();
@@ -205,7 +259,7 @@ export class ReviewUseCase {
     const contextEngine = createContextEngine();
     const reviewContext = await contextEngine.buildContext({
       changedFiles: filePaths,
-      diff: scope.diff,
+      diff: reviewDiff,
       symbolIndex,
       referenceGraph,
       diagnostics: diagnosticsResult.diagnostics,
