@@ -3,7 +3,7 @@
  * Uses temp file + rename for atomicity.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DiagnosticCollection } from '../analysis/diagnostics/index.js';
@@ -96,30 +96,10 @@ export class CacheStore {
   async set<T>(key: string, value: T): Promise<void> {
     await this.initialize();
 
-    // First serialize without size to get the content size
-    const tempEntry: CacheEntry<T> = {
-      key,
-      value,
-      createdAt: Date.now(),
-      size: 0,
-    };
-    const tempSerialized = JSON.stringify(tempEntry);
-    const contentSize = Buffer.byteLength(tempSerialized, 'utf-8');
-
-    const entry: CacheEntry<T> = {
-      key,
-      value,
-      createdAt: Date.now(),
-      size: contentSize,
-    };
-
-    const serialized = JSON.stringify(entry);
-
     const filePath = this.keyToFilePath(key);
-    const dir = dirname(filePath);
-    await mkdir(dir, { recursive: true });
+    await mkdir(dirname(filePath), { recursive: true });
 
-    // Replacing a key consumes only the size delta, not another full entry.
+    // Replacing an entry only consumes the additional bytes beyond its current size.
     let previousSize = 0;
     try {
       previousSize = (await stat(filePath)).size;
@@ -127,28 +107,41 @@ export class CacheStore {
       // This key does not exist yet.
     }
 
-    if (entry.size > this.maxSize) {
-      throw new RangeError(`Cache entry exceeds maximum cache size (${entry.size} > ${this.maxSize} bytes)`);
+    const entry: CacheEntry<T> = {
+      key,
+      value,
+      createdAt: Date.now(),
+      size: 0,
+    };
+    let serialized = JSON.stringify(entry);
+    // Store the final serialized byte count in the entry itself.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const actualSize = Buffer.byteLength(serialized, 'utf-8');
+      if (entry.size === actualSize) break;
+      entry.size = actualSize;
+      serialized = JSON.stringify(entry);
+    }
+    const serializedSize = Buffer.byteLength(serialized, 'utf-8');
+
+    if (serializedSize > this.maxSize) {
+      throw new RangeError(
+        `Cache entry exceeds maximum cache size (${serializedSize} > ${this.maxSize} bytes)`
+      );
     }
 
-    await this.ensureSpace(Math.max(0, entry.size - previousSize));
+    await this.ensureSpace(Math.max(0, serializedSize - previousSize), filePath);
 
-    // Atomic write: write to temp file, then rename
-    const tempPath = `${filePath}.tmp.${createHash('sha256')
-      .update(key + Date.now().toString())
-      .digest('hex')
-      .substring(0, 8)}`;
-
+    // UUID avoids same-key/same-millisecond collisions across concurrent writes.
+    const tempPath = `${filePath}.tmp.${randomUUID()}`;
     try {
       await writeFile(tempPath, serialized, 'utf-8');
       await rename(tempPath, filePath);
-      this.currentSize = Math.max(0, this.currentSize - previousSize + (await stat(filePath)).size);
+      this.currentSize = Math.max(0, this.currentSize - previousSize + serializedSize);
     } catch (error) {
-      // Clean up temp file on error
       try {
         await unlink(tempPath);
       } catch {
-        // Ignore cleanup errors
+        // Ignore cleanup errors.
       }
       throw error;
     }
@@ -237,7 +230,7 @@ export class CacheStore {
    * Ensures there's enough space for a new entry.
    * Evicts LRU entries if necessary.
    */
-  private async ensureSpace(requiredSize: number): Promise<void> {
+  private async ensureSpace(requiredSize: number, protectedPath?: string): Promise<void> {
     if (this.currentSize + requiredSize <= this.maxSize) {
       return;
     }
@@ -252,11 +245,17 @@ export class CacheStore {
 
     // Evict oldest entries until we have enough space
     for (const entry of entries) {
+      // Never evict the entry being replaced; its size is already included in currentSize.
+      if (entry.path === protectedPath) continue;
       if (this.currentSize + requiredSize <= this.maxSize) {
         break;
       }
       await unlink(entry.path);
       this.currentSize -= entry.size;
+    }
+
+    if (this.currentSize + requiredSize > this.maxSize) {
+      throw new RangeError('Cache capacity exceeded after evicting available entries');
     }
   }
 
