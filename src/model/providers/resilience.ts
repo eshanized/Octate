@@ -44,8 +44,8 @@ function getRetryAfterMs(
   headers?: Headers | Record<string, string>,
   error?: ErrorWithHttpMetadata
 ): number | null {
-  if (error?.retryAfterMs) {
-    return error.retryAfterMs;
+  if (error?.retryAfterMs !== undefined && Number.isFinite(error.retryAfterMs)) {
+    return Math.max(0, error.retryAfterMs);
   }
   if (!headers) {
     return null;
@@ -101,6 +101,45 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'EAI_AGAIN',
+  'EPIPE',
+  'ENETDOWN',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+function isRetryableNetworkError(error: ErrorWithHttpMetadata): boolean {
+  const code = (error as Error & { code?: string; cause?: unknown }).code;
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const causeCode =
+    cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string'
+      ? cause.code
+      : undefined;
+  if ((code && NETWORK_ERROR_CODES.has(code)) || (causeCode && NETWORK_ERROR_CODES.has(causeCode))) {
+    return true;
+  }
+
+  return (
+    error.name === 'TypeError' &&
+    /fetch failed|network error|socket|connection|dns|timed? out/i.test(error.message)
+  );
+}
+
+function requirePositiveInteger(name: string, value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`);
+  }
+  return value;
+}
+
 /**
  * Manages request concurrency, per-request timeouts, cancellation, and retry loops.
  */
@@ -111,14 +150,17 @@ export class ResilienceManager {
   private pool: PromisePool;
 
   constructor(options?: ResilienceOptions) {
-    this.maxRetries = options?.maxRetries ?? 3;
-    const envTimeout = process.env.OCTATE_TIMEOUT_MS
-      ? Number.parseInt(process.env.OCTATE_TIMEOUT_MS, 10)
-      : process.env.NVIDIA_TIMEOUT_MS
-        ? Number.parseInt(process.env.NVIDIA_TIMEOUT_MS, 10)
+    const envTimeoutValue = process.env.OCTATE_TIMEOUT_MS ?? process.env.NVIDIA_TIMEOUT_MS;
+    const envTimeout =
+      envTimeoutValue !== undefined && envTimeoutValue.trim() !== ''
+        ? Number(envTimeoutValue)
         : undefined;
-    this.timeoutMs = options?.timeoutMs ?? envTimeout ?? 120000;
-    this.concurrency = options?.concurrency ?? 2;
+    this.maxRetries = options?.maxRetries ?? 3;
+    if (!Number.isSafeInteger(this.maxRetries) || this.maxRetries < 0) {
+      throw new RangeError('maxRetries must be a non-negative safe integer');
+    }
+    this.timeoutMs = requirePositiveInteger('timeoutMs', options?.timeoutMs ?? envTimeout ?? 120000);
+    this.concurrency = requirePositiveInteger('concurrency', options?.concurrency ?? 2);
     this.pool = createPromisePool(this.concurrency);
   }
 
@@ -161,7 +203,7 @@ export class ResilienceManager {
       try {
         return await operation(combinedSignal);
       } catch (err: unknown) {
-        const error = err as ErrorWithHttpMetadata;
+        const error = (err instanceof Error ? err : new Error(String(err))) as ErrorWithHttpMetadata;
 
         // Check if caller aborted
         if (callerSignal?.aborted) {
@@ -187,7 +229,7 @@ export class ResilienceManager {
         // Determine if error is retryable (429 rate limit, 5xx server errors, or network errors)
         const isRateLimit = status === 429;
         const isServerError = typeof status === 'number' && status >= 500 && status < 600;
-        const isNetworkError = status === undefined && error.name !== 'AbortError';
+        const isNetworkError = status === undefined && isRetryableNetworkError(error);
         const isRetryable = isRateLimit || isServerError || isNetworkError;
 
         if (!isRetryable || attempt >= this.maxRetries) {
