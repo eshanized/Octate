@@ -24,8 +24,12 @@ project:
 review:
   # Minimum severity to report: critical, high, medium, low, info
   severity: "medium"
+  # Severity that causes CI failure: critical, high, medium, low, info, none, off
+  failOnSeverity: "critical"
   # Maximum number of findings to report (1-100)
   maxFindings: 50
+  # Minimum confidence threshold (0.0-1.0)
+  minConfidence: 0.6
 
 # Custom rules to apply during review
 # Each rule is a reference to a built-in or custom rule
