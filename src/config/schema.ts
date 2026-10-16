@@ -62,10 +62,12 @@ export const PartialOctateConfigSchema = z
     rules: z.array(z.string()).optional(),
     architecture: z
       .union([
-        z.object({
-          boundaries: z.array(z.string()).optional(),
-          forbiddenDependencies: z.array(z.string()).optional(),
-        }).strict(),
+        z
+          .object({
+            boundaries: z.array(z.string()).optional(),
+            forbiddenDependencies: z.array(z.string()).optional(),
+          })
+          .strict(),
         z.null(),
       ])
       .optional(),
