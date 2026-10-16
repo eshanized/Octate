@@ -64,6 +64,26 @@ describe('CacheStore', () => {
     expect(await smallStore.getSize()).toBeLessThanOrEqual(1200);
   });
 
+  it('keeps capacity accounting correct under concurrent mutations', async () => {
+    const smallStoreDir = resolve(TEST_DIR, `concurrent-${randomUUID()}`);
+    const smallStore = await createCacheStore({ rootDir: smallStoreDir, maxSize: 1200 });
+
+    await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        smallStore.set(`concurrent-key-${index}`, 'x'.repeat(180))
+      )
+    );
+
+    expect(await smallStore.getSize()).toBeLessThanOrEqual(1200);
+    expect(await smallStore.has('concurrent-key-9')).toBe(true);
+
+    await Promise.all([
+      smallStore.delete('concurrent-key-8'),
+      smallStore.set('replacement', 'y'.repeat(180)),
+    ]);
+    expect(await smallStore.getSize()).toBeLessThanOrEqual(1200);
+  });
+
   it('rejects a single entry larger than the cache capacity', async () => {
     const smallStoreDir = resolve(TEST_DIR, `oversize-${randomUUID()}`);
     const smallStore = await createCacheStore({ rootDir: smallStoreDir, maxSize: 128 });
