@@ -44,6 +44,34 @@ export const OctateConfigSchema = z
   })
   .strict();
 
+export const PartialOctateConfigSchema = z
+  .object({
+    version: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
+    project: z.object({ name: z.string().min(1).optional() }).strict().optional(),
+    review: z
+      .object({
+        severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
+        failOnSeverity: z.enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off']).optional(),
+        maxFindings: z.number().int().positive().max(100).optional(),
+        minConfidence: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+    rules: z.array(z.string()).optional(),
+    architecture: z
+      .union([
+        z.object({
+          boundaries: z.array(z.string()).optional(),
+          forbiddenDependencies: z.array(z.string()).optional(),
+        }).strict(),
+        z.null(),
+      ])
+      .optional(),
+    ignore: z.array(z.string()).optional(),
+  })
+  .strict();
+
+export type PartialOctateConfig = z.infer<typeof PartialOctateConfigSchema>;
 export type OctateConfig = z.infer<typeof OctateConfigSchema>;
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>;
 export type ArchitectureConfig = z.infer<typeof ArchitectureConfigSchema>;
