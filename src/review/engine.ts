@@ -176,6 +176,7 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
+      getFileContent: async (file) => input.fileContents?.get(file) ?? null,
     });
     // results is keyed by the original finding objects, while findings contains validated copies.
     // Preserve the positional relationship and fail closed if a validation result is missing.
@@ -266,6 +267,7 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
+      getFileContent: async (file) => input.fileContents?.get(file) ?? null,
     });
 
     const gateResult = runDecisionGate(rankedFindings, postRankValidation.results, {
