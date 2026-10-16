@@ -280,6 +280,24 @@ describe('Git operations', () => {
       expect(diff).toContain('+changed near end');
     });
 
+    it('captures changes to the final newline even when line content is unchanged', async () => {
+      await fs.writeFile(path.join(testDir, 'README.md'), '# Test Repo\\n');
+      await git.add({ fs, dir: testDir, filepath: 'README.md' });
+      await git.commit({ fs, dir: testDir, message: 'Add final newline' });
+
+      const baseOid = await resolveRef(testDir, 'HEAD');
+      await fs.writeFile(path.join(testDir, 'README.md'), '# Test Repo');
+      await git.add({ fs, dir: testDir, filepath: 'README.md' });
+      await git.commit({ fs, dir: testDir, message: 'Remove final newline' });
+
+      const headOid = await resolveRef(testDir, 'HEAD');
+      const diff = await getDiff(testDir, baseOid, headOid);
+
+      expect(diff).toContain('-# Test Repo');
+      expect(diff).toContain('+# Test Repo');
+      expect(diff).toContain('\\\\ No newline at end of file');
+    });
+
     it('produces diff between two commits', async () => {
       // Create third commit
       await fs.writeFile(path.join(testDir, 'new-file.txt'), 'new content\n');
