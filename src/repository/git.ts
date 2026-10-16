@@ -345,8 +345,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
               gitdir: gitDir,
               oid: headBlobOid,
             });
-            const headContent = Buffer.from(headBlob.blob).toString('utf-8');
-            if (status === 'added') {
+            const headContent = decodeTextBlob(headBlob.blob);
+            if (headContent === null) {
+              diff = `# Binary file ${filepath} differs\n`;
+            } else if (status === 'added') {
               diff = generateAddedDiff(filepath, headContent);
             } else if (baseBlobOid) {
               const baseBlob = await git.readBlob({
@@ -355,8 +357,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
                 gitdir: gitDir,
                 oid: baseBlobOid,
               });
-              const baseContent = Buffer.from(baseBlob.blob).toString('utf-8');
-              diff = generateUnifiedDiff(filepath, baseContent, headContent);
+              const baseContent = decodeTextBlob(baseBlob.blob);
+              diff = baseContent === null
+                ? `# Binary file ${filepath} differs\n`
+                : generateUnifiedDiff(filepath, baseContent, headContent);
             }
           } catch {
             // Binary file or read error
@@ -370,8 +374,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
               gitdir: gitDir,
               oid: baseBlobOid,
             });
-            const baseContent = Buffer.from(baseBlob.blob).toString('utf-8');
-            diff = generateDeletedDiff(filepath, baseContent);
+            const baseContent = decodeTextBlob(baseBlob.blob);
+            diff = baseContent === null
+              ? `# Binary file ${filepath} deleted\n`
+              : generateDeletedDiff(filepath, baseContent);
           } catch {
             diff = `# Binary file ${filepath} deleted\n`;
           }
