@@ -22,7 +22,7 @@ if (configuredEnvLogLevel && allowedLogLevels.has(configuredEnvLogLevel as LogLe
 import type { CancellationController } from './cancellation/index.js';
 import { registerCommands } from './commands/index.js';
 import { isOctateError } from './errors/index.js';
-import { createLogger, setLogLevel, type LogLevel } from './logging/index.js';
+import { createLogger, type LogLevel, setLogLevel } from './logging/index.js';
 import { OCTATE_VERSION } from './version.js';
 
 const logger = createLogger('cli');
@@ -82,7 +82,9 @@ function _setupLogger(options: GlobalOptions): void {
   if (!logLevel) return;
 
   if (!allowedLogLevels.has(logLevel)) {
-    throw new Error(`Invalid log level "${logLevel}". Choose one of: trace, debug, info, warn, error, fatal.`);
+    throw new Error(
+      `Invalid log level "${logLevel}". Choose one of: trace, debug, info, warn, error, fatal.`
+    );
   }
 
   process.env.LOG_LEVEL = logLevel;
