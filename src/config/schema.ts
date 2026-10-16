@@ -71,9 +71,19 @@ export const PartialOctateConfigSchema = z
   })
   .strict();
 
+type OptionalFields<T> = { [P in keyof T]?: T[P] | undefined };
+
 export type PartialOctateConfig = {
-  version?: string;
-  project?: { name?: string };
+  version?: string | undefined;
+  project?: { name?: string | undefined } | undefined;
+  review?: OptionalFields<ReviewConfig> | undefined;
+  rules?: string[] | undefined;
+  architecture?:
+    | { boundaries?: string[] | undefined; forbiddenDependencies?: string[] | undefined }
+    | null
+    | undefined;
+  ignore?: string[] | undefined;
+};
   review?: Partial<ReviewConfig>;
   rules?: string[];
   architecture?: { boundaries?: string[]; forbiddenDependencies?: string[] } | null;
