@@ -62,8 +62,8 @@ describe('application:review', () => {
   });
 
   it('applies ignore patterns before parsing or invoking the model', async () => {
-    await fs.writeFile(path.join(testDir, '.octateignore'), 'ignored.ts\\n');
-    await fs.writeFile(path.join(testDir, 'ignored.ts'), 'export const ignored = true;\\n');
+    await fs.writeFile(path.join(testDir, '.octateignore'), 'ignored.ts\n');
+    await fs.writeFile(path.join(testDir, 'ignored.ts'), 'export const ignored = true;\n');
 
     const result = await useCase.execute({
       repoRoot: testDir,
