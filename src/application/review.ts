@@ -17,10 +17,10 @@ import {
 } from '../intelligence/index.js';
 import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
-import { findGitRoot } from '../repository/discovery.js';
-import { resolveScope, type ScopeOptions } from '../repository/scope.js';
-import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
 import { createFileFilter } from '../repository/filter.js';
+import { findGitRoot } from '../repository/discovery.js';
+import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
+import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
 import { OCTATE_VERSION } from '../version.js';
