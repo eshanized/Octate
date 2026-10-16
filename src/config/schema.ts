@@ -51,7 +51,9 @@ export const PartialOctateConfigSchema = z
     review: z
       .object({
         severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
-        failOnSeverity: z.enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off']).optional(),
+        failOnSeverity: z
+          .enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off'])
+          .optional(),
         maxFindings: z.number().int().positive().max(100).optional(),
         minConfidence: z.number().min(0).max(1).optional(),
       })
