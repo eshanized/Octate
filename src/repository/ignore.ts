@@ -34,7 +34,9 @@ export interface IgnoreParseResult {
 export async function parseIgnoreFile(filePath: string): Promise<IgnoreParseResult> {
   try {
     const content = await readFile(filePath, 'utf-8');
-    const lines = content.split('\n').map((line) => line.endsWith('\r') ? line.slice(0, -1) : line);
+    const lines = content
+      .split('\n')
+      .map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
     // Preserve escaped trailing spaces and other Git ignore syntax; trimming patterns
     // changes their meaning (for example, "file\\ " matches a name ending in a space).
     const patterns = lines.filter(
@@ -139,7 +141,9 @@ export async function createWorkspaceIgnoreMatcher(
       const normalized = normalizePathForIgnore(repoRoot, filePath);
       if (rootMatcher.ignores(normalized)) return true;
 
-      if (!workspaceRelativeRoot || workspaceRelativeRoot === '.') return workspaceMatcher.ignores(normalized);
+      if (!workspaceRelativeRoot || workspaceRelativeRoot === '.') {
+        return workspaceMatcher.ignores(normalized);
+      }
       if (normalized === workspaceRelativeRoot) return false;
       const prefix = workspaceRelativeRoot + '/';
       if (!normalized.startsWith(prefix)) return false;
