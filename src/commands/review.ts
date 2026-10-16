@@ -198,12 +198,11 @@ export async function runReview(
     // Load configuration
     const config = await loadConfig({
       configPath: options.config,
+      // Only explicit CLI choices override project/global configuration.
+      // Output flags such as --quiet must not silently change review semantics.
       cliConfig: {
         review: {
-          severity: options.quiet ? 'info' : 'medium',
-          failOnSeverity: options.failOn ?? 'critical',
-          maxFindings: 50,
-          minConfidence: 0.6,
+          ...(options.failOn !== undefined ? { failOnSeverity: options.failOn } : {}),
         },
       },
     });
