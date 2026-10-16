@@ -231,5 +231,47 @@ describe('config/merger', () => {
       expect(config.review.severity).toBe('high'); // env wins
       expect(config.review.maxFindings).toBe(10); // CLI wins
     });
+
+    it('does not let defaults from a partial project file overwrite global values', async () => {
+      await writeFile(
+        join(testDir, 'octate.yaml'),
+        'version: "1.0.0"\\nproject:\\n  name: project-config\\nreview:\\n  severity: low\\n'
+      );
+
+      const globalDir = join(testDir, '.config', 'octate');
+      await mkdir(globalDir, { recursive: true });
+      await writeFile(
+        join(globalDir, 'config.yaml'),
+        'version: "1.0.0"\\nproject:\\n  name: global-config\\nreview:\\n  maxFindings: 100\\n  minConfidence: 0.8\\n'
+      );
+      process.env.HOME = testDir;
+      process.env.XDG_CONFIG_HOME = join(testDir, '.config');
+
+      const config = await loadConfig({
+        configPath: join(testDir, 'octate.yaml'),
+        envConfig: {},
+        cliConfig: {},
+      });
+
+      expect(config.review.severity).toBe('low');
+      expect(config.review.maxFindings).toBe(100);
+      expect(config.review.minConfidence).toBe(0.8);
+    });
+
+    it('applies an explicit null architecture value during merging', () => {
+      const global = {
+        version: DefaultConfig.version,
+        project: { name: 'global' },
+        architecture: { boundaries: ['src/global'], forbiddenDependencies: ['bad-lib'] },
+      };
+      const merged = mergeConfigs(
+        DefaultConfig,
+        global,
+        { version: '1.0.0', project: { name: 'project' }, architecture: null },
+        {},
+        {}
+      );
+      expect(merged.architecture).toEqual({ boundaries: [], forbiddenDependencies: [] });
+    });
   });
 });
