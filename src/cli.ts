@@ -187,14 +187,19 @@ export async function runWithCancellation<T>(
 ): Promise<T> {
   controller.throwIfAborted();
 
+  let abortHandler: (() => void) | undefined;
   const abortPromise = new Promise<never>((_, reject) => {
-    const handler = () => reject(controller.signal.reason ?? new Error('Operation cancelled'));
-    controller.signal.addEventListener('abort', handler, { once: true });
+    abortHandler = () => reject(controller.signal.reason ?? new Error('Operation cancelled'));
+    controller.signal.addEventListener('abort', abortHandler, { once: true });
   });
 
   try {
     return await Promise.race([operation(controller.signal), abortPromise]);
   } finally {
+    if (abortHandler) {
+      controller.signal.removeEventListener('abort', abortHandler);
+      abortHandler = undefined;
+    }
     controller.throwIfAborted();
   }
 }
