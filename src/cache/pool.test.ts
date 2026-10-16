@@ -48,6 +48,54 @@ describe('PromisePool', () => {
     expect(results).toEqual([2, 4, 6, 8, 10]);
   });
 
+  it('yields each concurrent task result exactly once', async () => {
+    const pool = createPromisePool(2);
+    const tasks = [
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return 'slow';
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return 'medium';
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return 'fast';
+      },
+    ];
+
+    const results: string[] = [];
+    for await (const result of pool.iterate(tasks)) {
+      results.push(result);
+    }
+
+    expect(results).toHaveLength(3);
+    expect([...results].sort()).toEqual(['fast', 'medium', 'slow']);
+    expect(new Set(results).size).toBe(3);
+    expect(results[0]).toBe('medium');
+  });
+
+  it('propagates iterator task failures to the consumer', async () => {
+    const pool = createPromisePool(2);
+    const tasks = [
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        throw new Error('task failed');
+      },
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return 'ok';
+      },
+    ];
+
+    await expect(async () => {
+      for await (const _result of pool.iterate(tasks)) {
+        // consume values until the iterator fails
+      }
+    }).rejects.toThrow('task failed');
+  });
+
   it('tracks pending and active counts', async () => {
     const pool = createPromisePool(2);
 
