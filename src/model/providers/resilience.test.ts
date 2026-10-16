@@ -40,6 +40,36 @@ describe('ResilienceManager', () => {
     expect(rm.concurrency).toBe(1);
   });
 
+  it('does not retry arbitrary programming errors without HTTP metadata', async () => {
+    const rm = new ResilienceManager({ maxRetries: 3, timeoutMs: 5000 });
+    const operation = jest.fn(async () => {
+      throw new Error('invariant violated');
+    });
+
+    await expect(rm.execute(operation)).rejects.toThrow(ModelError);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries recognized fetch network failures', async () => {
+    const rm = new ResilienceManager({ maxRetries: 1, timeoutMs: 5000 });
+    let calls = 0;
+    const operation = jest.fn(async () => {
+      calls++;
+      if (calls === 1) throw new TypeError('fetch failed');
+      return 'recovered';
+    });
+
+    await expect(rm.execute(operation)).resolves.toBe('recovered');
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects invalid timeout and concurrency values', () => {
+    expect(() => new ResilienceManager({ timeoutMs: 0 })).toThrow(RangeError);
+    expect(() => new ResilienceManager({ timeoutMs: Number.NaN })).toThrow(RangeError);
+    expect(() => new ResilienceManager({ concurrency: 0 })).toThrow(RangeError);
+    expect(() => new ResilienceManager({ maxRetries: -1 })).toThrow(RangeError);
+  });
+
   it('retries on 429 and succeeds when retry resolves', async () => {
     const rm = new ResilienceManager({
       maxRetries: 3,
