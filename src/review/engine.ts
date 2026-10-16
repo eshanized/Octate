@@ -177,9 +177,12 @@ export class ReviewEngine {
       diff: input.diff,
       changedFiles: input.changedFiles,
     });
-    const candidateFindingsForCritic = preCriticValidation.findings.filter((f) => {
-      const res = preCriticValidation.results.get(f);
-      return res ? res.evidenceStrength > 0 : true;
+    // results is keyed by the original finding objects, while findings contains validated copies.
+    // Preserve the positional relationship and fail closed if a validation result is missing.
+    const candidateFindingsForCritic = preCriticValidation.findings.filter((_, index) => {
+      const original = preCriticFindings[index];
+      const result = original ? preCriticValidation.results.get(original) : undefined;
+      return result !== undefined && result.evidenceStrength > 0;
     });
 
     const criticResult = await executeCriticStage({
