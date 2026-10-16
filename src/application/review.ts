@@ -278,7 +278,11 @@ export class ReviewUseCase {
 
     // Stages 6-8: review:dag, review:critic, review:rank (Steps 6-8/8)
     signal?.throwIfAborted();
-    const model = options.modelOverride ?? new LocalNvidiaProvider({ repoRoot, fileContents });
+    const model = options.modelOverride ?? new LocalNvidiaProvider({
+      repoRoot,
+      fileContents,
+      readFileAtScope: (file) => readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
+    });
     const engine = createReviewEngine();
 
     const result = await engine.run({
@@ -286,6 +290,7 @@ export class ReviewUseCase {
       diff: reviewDiff,
       changedFiles: filePaths,
       fileContents,
+      readFileAtScope: (file) => readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
       reviewContext,
       referenceGraph,
       symbolIndex,
