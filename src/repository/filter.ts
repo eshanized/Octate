@@ -105,21 +105,23 @@ export async function isBinaryFileFast(filePath: string): Promise<boolean> {
       return true;
     }
 
-    // Check ratio of non-printable characters in the decoded text
-    // Count control characters (except newline, tab, carriage return)
-    let nonPrintable = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === undefined) continue;
-      const code = char.charCodeAt(0);
-      // Allow: printable (32-126), newline (10), tab (9), carriage return (13)
-      if (code !== 9 && code !== 10 && code !== 13 && (code < 32 || code > 126)) {
-        nonPrintable++;
+    // UTF-8 non-ASCII characters are valid text, not binary. Only control
+    // characters that are not ordinary whitespace count as suspicious.
+    let suspiciousControls = 0;
+    let measuredCharacters = 0;
+    for (const char of text) {
+      const code = char.codePointAt(0);
+      if (code === undefined) continue;
+      measuredCharacters++;
+      if ((code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+          (code >= 0x7f && code <= 0x9f)) {
+        suspiciousControls++;
       }
     }
 
-    // If more than 30% non-printable, likely binary
-    return nonPrintable / text.length > 0.3;
+    // A high control-character ratio is a useful binary heuristic without
+    // rejecting legitimate Unicode source code and documentation.
+    return measuredCharacters > 0 && suspiciousControls / measuredCharacters > 0.3;
   } catch {
     // If we can't read, assume binary to be safe
     return true;
