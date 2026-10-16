@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as git from 'isomorphic-git';
 import {
+  filterDiffToFiles,
   getChangedFiles,
   getDiff,
   getLog,
@@ -15,6 +16,45 @@ import {
   getWorkingDiff,
   resolveRef,
 } from './git.js';
+
+describe('filterDiffToFiles', () => {
+  it('keeps only included files across multiple diff sections', () => {
+    const diff = [
+      '--- a/ignored.ts',
+      '+++ b/ignored.ts',
+      '@@ -1,1 +1,1 @@',
+      '-old',
+      '+new',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,1 +1,1 @@',
+      '-before',
+      '+after',
+      '--- /dev/null',
+      '+++ b/src/added.ts',
+      '@@ -0,0 +1,1 @@',
+      '+added',
+    ].join('\\n');
+
+    expect(filterDiffToFiles(diff, ['src/app.ts', 'src/added.ts'])).toContain('+++ b/src/app.ts');
+    expect(filterDiffToFiles(diff, ['src/app.ts', 'src/added.ts'])).toContain('+++ b/src/added.ts');
+    expect(filterDiffToFiles(diff, ['src/app.ts', 'src/added.ts'])).not.toContain('ignored.ts');
+  });
+
+  it('handles deleted and binary file sections', () => {
+    const diff = [
+      '--- a/src/deleted.ts',
+      '+++ /dev/null',
+      '@@ -1,1 +0,0 @@',
+      '-deleted',
+      '# Binary file assets/logo.png differs',
+    ].join('\\n');
+    const selected = filterDiffToFiles(diff, ['src/deleted.ts', 'assets/logo.png']);
+    expect(selected).toContain('src/deleted.ts');
+    expect(selected).toContain('# Binary file assets/logo.png differs');
+    expect(filterDiffToFiles(diff, [])).toBe('');
+  });
+});
 
 describe('Git operations', () => {
   let testDir: string;
