@@ -5,8 +5,8 @@ import { loadGlobalConfigLayer, loadProjectConfigLayer } from './loader.js';
 import {
   DefaultConfig,
   type OctateConfig,
-  type PartialOctateConfig,
   OctateConfigSchema,
+  type PartialOctateConfig,
 } from './schema.js';
 
 const logger = createLogger('config:merger');
