@@ -735,8 +735,29 @@ function decodeTextBlob(bytes: Uint8Array): string | null {
 }
 
 /**
- * Reads a changed file from the exact target snapshot of a review scope.
- * This keeps staged and historical reviews aligned with the diff being reviewed.
+ * Converts a model-provided path to a repository-relative Git path and blocks traversal.
+ */
+function normalizeScopeFilePath(repoRoot: string, filepath: string): string | null {
+  if (!filepath || filepath.includes('\\0')) return null;
+
+  const absoluteRoot = path.resolve(repoRoot);
+  const absoluteFile = path.resolve(absoluteRoot, filepath);
+  const relativePath = path.relative(absoluteRoot, absoluteFile);
+  if (
+    !relativePath ||
+    relativePath === '..' ||
+    relativePath.startsWith('..' + path.sep) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+
+  return relativePath.split(path.sep).join('/');
+}
+
+/**
+ * Reads a file from the exact target snapshot of a review scope.
+ * Works for changed files and unchanged context while preventing repository escape.
  */
 export async function readFileAtReviewScope(
   repoRoot: string,
@@ -744,9 +765,12 @@ export async function readFileAtReviewScope(
   headRef: string,
   filepath: string
 ): Promise<string | null> {
+  const normalizedPath = normalizeScopeFilePath(repoRoot, filepath);
+  if (!normalizedPath) return null;
+
   if (scopeType === 'working-tree') {
     try {
-      return decodeTextBlob(await fs.readFile(path.join(repoRoot, filepath)));
+      return decodeTextBlob(await fs.readFile(path.resolve(repoRoot, normalizedPath)));
     } catch {
       return null;
     }
@@ -754,7 +778,7 @@ export async function readFileAtReviewScope(
 
   const gitDir = await findGitDir(repoRoot);
   if (scopeType === 'staged') {
-    const oid = (await readIndexOids(gitDir)).get(filepath);
+    const oid = (await readIndexOids(gitDir)).get(normalizedPath);
     if (!oid) return null;
     const blob = await readBlobAtOid(repoRoot, gitDir, oid);
     return blob ? decodeTextBlob(blob) : null;
@@ -762,7 +786,7 @@ export async function readFileAtReviewScope(
 
   try {
     const commitOid = await resolveRef(repoRoot, headRef);
-    return await readBlobAtCommit(repoRoot, gitDir, commitOid, filepath);
+    return await readBlobAtCommit(repoRoot, gitDir, commitOid, normalizedPath);
   } catch {
     return null;
   }
