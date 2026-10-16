@@ -189,6 +189,29 @@ describe('Git operations', () => {
   });
 
   describe('getDiff', () => {
+    it('separates distant edits into multiple hunks', async () => {
+      const oldLines = Array.from({ length: 24 }, (_, index) => 'line ' + (index + 1));
+      await fs.writeFile(path.join(testDir, 'file1.ts'), oldLines.join('\\n') + '\\n');
+      await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
+      await git.commit({ fs, dir: testDir, message: 'Add long file' });
+
+      const newLines = [...oldLines];
+      newLines[1] = 'changed near start';
+      newLines[21] = 'changed near end';
+      await fs.writeFile(path.join(testDir, 'file1.ts'), newLines.join('\\n') + '\\n');
+      await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
+      await git.commit({ fs, dir: testDir, message: 'Change two distant lines' });
+
+      const headOid = await resolveRef(testDir, 'HEAD');
+      const parentOid = await getParentCommit(testDir, headOid);
+      const diff = await getDiff(testDir, parentOid, headOid);
+      expect((diff.match(/^@@ /gm) ?? []).length).toBe(2);
+      expect(diff).toContain('-line 2');
+      expect(diff).toContain('+changed near start');
+      expect(diff).toContain('-line 22');
+      expect(diff).toContain('+changed near end');
+    });
+
     it('produces diff between two commits', async () => {
       // Create third commit
       await fs.writeFile(path.join(testDir, 'new-file.txt'), 'new content\n');
@@ -255,6 +278,30 @@ describe('Git operations', () => {
     it('returns empty string when nothing is staged', async () => {
       const diff = await getStagedDiff(testDir);
       expect(diff.trim()).toBe('');
+    });
+
+    it('uses the index snapshot when working tree changes after staging', async () => {
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 2;\\n');
+      await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
+      await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\\n');
+
+      const stagedDiff = await getStagedDiff(testDir);
+      const workingDiff = await getWorkingDiff(testDir);
+
+      expect(stagedDiff).toContain('+export const a = 2;');
+      expect(stagedDiff).not.toContain('+export const a = 3;');
+      expect(workingDiff).toContain('-export const a = 2;');
+      expect(workingDiff).toContain('+export const a = 3;');
+      expect(workingDiff).not.toContain('-export const a = 1;');
+    });
+
+    it('counts final newlines without inventing an extra diff line', async () => {
+      await fs.writeFile(path.join(testDir, 'added-with-newline.txt'), 'single line\\n');
+      await git.add({ fs, dir: testDir, filepath: 'added-with-newline.txt' });
+
+      const diff = await getStagedDiff(testDir);
+      expect(diff).toContain('@@ -0,0 +1,1 @@');
+      expect(diff).not.toContain('@@ -0,0 +1,2 @@');
     });
   });
 
