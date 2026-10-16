@@ -45,6 +45,8 @@ export class CacheStore {
   private maxSize: number;
   private currentSize: number = 0;
   private sizeInitialized: boolean = false;
+  private initialization: Promise<void> | null = null;
+  private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(options: CacheStoreOptions) {
     this.rootDir = options.rootDir;
@@ -56,10 +58,31 @@ export class CacheStore {
    */
   async initialize(): Promise<void> {
     if (this.sizeInitialized) return;
+    if (this.initialization) return this.initialization;
 
-    await mkdir(this.rootDir, { recursive: true });
-    this.currentSize = await this.calculateDirectorySize(this.rootDir);
-    this.sizeInitialized = true;
+    this.initialization = (async () => {
+      await mkdir(this.rootDir, { recursive: true });
+      this.currentSize = await this.calculateDirectorySize(this.rootDir);
+      this.sizeInitialized = true;
+    })();
+
+    try {
+      await this.initialization;
+    } finally {
+      this.initialization = null;
+    }
+  }
+
+  /**
+   * Serializes operations that mutate cache files and byte accounting.
+   */
+  private runMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.mutationQueue.then(operation, operation);
+    this.mutationQueue = pending.then(
+      () => undefined,
+      () => undefined
+    );
+    return pending;
   }
 
   /**
@@ -104,6 +127,10 @@ export class CacheStore {
    * Sets a cache entry with atomic write.
    */
   async set<T>(key: string, value: T): Promise<void> {
+    return this.runMutation(() => this.setInternal(key, value));
+  }
+
+  private async setInternal<T>(key: string, value: T): Promise<void> {
     await this.initialize();
 
     const filePath = this.keyToFilePath(key);
@@ -161,6 +188,10 @@ export class CacheStore {
    * Deletes a cache entry.
    */
   async delete(key: string): Promise<boolean> {
+    return this.runMutation(() => this.deleteInternal(key));
+  }
+
+  private async deleteInternal(key: string): Promise<boolean> {
     await this.initialize();
     const filePath = this.keyToFilePath(key);
 
@@ -207,6 +238,10 @@ export class CacheStore {
    * Clears all cache entries.
    */
   async clear(): Promise<void> {
+    return this.runMutation(() => this.clearInternal());
+  }
+
+  private async clearInternal(): Promise<void> {
     await this.initialize();
     await this.clearDirectory(this.rootDir);
     this.currentSize = 0;
