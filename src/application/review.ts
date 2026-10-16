@@ -4,7 +4,6 @@
  * emitting the 8 canonical progress events and enforcing cancellation checks.
  */
 
-import { readFile } from 'node:fs/promises';
 import { collectDiagnostics } from '../analysis/diagnostics/index.js';
 import { parseFiles } from '../analysis/parser/index.js';
 import { extractSymbols } from '../analysis/symbols/index.js';
