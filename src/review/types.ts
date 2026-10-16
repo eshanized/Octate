@@ -205,6 +205,8 @@ export interface ReviewEngineInput {
   repoRoot: string;
   diff: string;
   changedFiles: string[];
+  /** Contents read from the exact reviewed snapshot for changed files. */
+  fileContents?: ReadonlyMap<string, string> | undefined;
   reviewContext: ReviewContext;
   referenceGraph: ReferenceGraph;
   symbolIndex: SymbolIndex;
