@@ -29,6 +29,7 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
   private exitResolver: (() => void) | null = null;
   private exitPromise: Promise<void> | null = null;
   private finalSuppressedIds: ReadonlySet<string> = new Set();
+  private latestResult: ReviewResult | null = null;
   private started = false;
 
   constructor(options: InteractiveTuiOptions = {}) {
@@ -101,6 +102,7 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
   }
 
   public dispatchResult(result: ReviewResult): void {
+    this.latestResult = result;
     this.actionEmitter.emit('action', { type: 'FINISH_REVIEW', result });
   }
 
@@ -149,7 +151,10 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
     }
 
     const threshold = this.options.failOn ?? 'critical';
-    const activeFindings = result.findings.filter((f) => !this.finalSuppressedIds.has(f.id));
+    // Re-review can replace the displayed result while render() is waiting for the user to quit.
+    // Evaluate the latest visible result, not the result that started the TUI session.
+    const finalResult = this.latestResult ?? result;
+    const activeFindings = finalResult.findings.filter((f) => !this.finalSuppressedIds.has(f.id));
     const finalBlockingCount = countBlockingFindings(activeFindings, threshold);
     process.exitCode = finalBlockingCount > 0 ? 1 : 0;
 
