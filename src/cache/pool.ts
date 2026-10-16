@@ -11,7 +11,13 @@ import pLimit from 'p-limit';
  * @returns Promise pool controller
  */
 export function createPromisePool(concurrency?: number): PromisePool {
-  const limit = pLimit(concurrency ?? navigator?.hardwareConcurrency ?? 4);
+  const detectedConcurrency =
+    typeof navigator !== 'undefined' &&
+    Number.isSafeInteger(navigator.hardwareConcurrency) &&
+    navigator.hardwareConcurrency > 0
+      ? navigator.hardwareConcurrency
+      : 4;
+  const limit = pLimit(concurrency ?? detectedConcurrency);
   return new PromisePool(limit);
 }
 
@@ -59,43 +65,30 @@ export class PromisePool {
    * @returns Async iterator yielding results as they complete
    */
   async *iterate<T>(fns: Array<() => Promise<T>>): AsyncIterableIterator<T> {
-    const executing = new Set<Promise<T>>();
-    const _queue = [...fns];
+    type SettledResult =
+      | { task: Promise<SettledResult>; ok: true; value: T }
+      | { task: Promise<SettledResult>; ok: false; error: unknown };
+
+    const pending = new Set<Promise<SettledResult>>();
 
     for (const fn of fns) {
-      const promise = this.limit(fn);
-      executing.add(promise);
-      promise.finally(() => executing.delete(promise));
-
-      // Yield completed promises
-      for (const p of executing) {
-        try {
-          const result = await p;
-          yield result;
-        } catch {
-          // Ignore errors in iterator, they'll be caught by the caller
-        }
-      }
+      let task: Promise<SettledResult>;
+      task = this.limit(fn).then(
+        (value): SettledResult => ({ task, ok: true, value }),
+        (error: unknown): SettledResult => ({ task, ok: false, error })
+      );
+      pending.add(task);
     }
 
-    // Wait for remaining
-    while (executing.size > 0) {
-      const result = await Promise.race(executing);
-      // Find and remove the completed promise
-      for (const p of executing) {
-        try {
-          // Check if this promise is settled by trying to get its result
-          const isSettled = await Promise.race([p, Promise.resolve(null)]);
-          if (isSettled !== null) {
-            executing.delete(p);
-            break;
-          }
-        } catch {
-          executing.delete(p);
-          break;
-        }
+    // Each wrapped promise always resolves, so rejected tasks cannot create
+    // unhandled rejections while other tasks are still running.
+    while (pending.size > 0) {
+      const settled = await Promise.race(pending);
+      pending.delete(settled.task);
+      if (!settled.ok) {
+        throw settled.error;
       }
-      yield result;
+      yield settled.value;
     }
   }
 
