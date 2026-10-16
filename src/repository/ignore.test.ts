@@ -60,8 +60,8 @@ describe('ignore', () => {
 
     it('preserves escaped trailing spaces in ignore patterns', async () => {
       const gitignorePath = join(repoRoot, '.gitignore');
-      const pattern = String.raw`literal-space\\ `;
-      await writeFile(gitignorePath, pattern + '\\n');
+      const pattern = String.raw`literal-space\ `;
+      await writeFile(gitignorePath, pattern + '\n');
 
       const result = await parseIgnoreFile(gitignorePath);
 
