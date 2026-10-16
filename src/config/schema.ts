@@ -46,8 +46,8 @@ export const OctateConfigSchema = z
 
 export const PartialOctateConfigSchema = z
   .object({
-    version: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
-    project: z.object({ name: z.string().min(1).optional() }).strict().optional(),
+    version: z.string().regex(/^\d+\.\d+\.\d+$/),
+    project: z.object({ name: z.string().min(1) }).strict(),
     review: z
       .object({
         severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
@@ -71,7 +71,14 @@ export const PartialOctateConfigSchema = z
   })
   .strict();
 
-export type PartialOctateConfig = z.infer<typeof PartialOctateConfigSchema>;
+export type PartialOctateConfig = {
+  version?: string;
+  project?: { name?: string };
+  review?: Partial<ReviewConfig>;
+  rules?: string[];
+  architecture?: { boundaries?: string[]; forbiddenDependencies?: string[] } | null;
+  ignore?: string[];
+};
 export type OctateConfig = z.infer<typeof OctateConfigSchema>;
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>;
 export type ArchitectureConfig = z.infer<typeof ArchitectureConfigSchema>;
