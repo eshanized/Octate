@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
@@ -41,7 +41,7 @@ architecture:
   #   - "src/core"
   #   - "src/api"
   # Forbidden dependency patterns (glob patterns)
-  # forbidden_dependencies:
+  # forbiddenDependencies:
   #   - "lodash"
   #   - "moment"
   #   - "@internal/*"
@@ -68,7 +68,7 @@ export function createInitCommand(): Command {
     .action(async (repoPath: string, options: { force?: boolean; name?: string }) => {
       const targetDir = resolve(repoPath);
       const configPath = join(targetDir, 'octate.yaml');
-      const projectName = options.name ?? targetDir.split('/').pop() ?? 'unnamed-project';
+      const projectName = options.name ?? (basename(targetDir) || 'unnamed-project');
 
       logger.info({ configPath, projectName, force: options.force }, 'Initializing Octate config');
 
