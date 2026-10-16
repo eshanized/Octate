@@ -283,8 +283,7 @@ export class ReviewUseCase {
       new LocalNvidiaProvider({
         repoRoot,
         fileContents,
-        readFileAtScope: (file) =>
-          readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
+        readFileAtScope: (file) => readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
       });
     const engine = createReviewEngine();
 
