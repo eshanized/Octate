@@ -576,8 +576,9 @@ export function filterDiffToFiles(diff: string, filePaths: readonly string[]): s
     const line = diffLines[index] ?? '';
     const nextLine = diffLines[index + 1];
     const isFileHeader =
-      (line.startsWith('--- a/') || line === '--- /dev/null') &&
-      nextLine?.startsWith('+++ b/');
+      (line.startsWith('--- a/') &&
+        (nextLine?.startsWith('+++ b/') || nextLine === '+++ /dev/null')) ||
+      (line === '--- /dev/null' && nextLine?.startsWith('+++ b/'));
     if (isFileHeader || line.startsWith('# Binary')) {
       flush();
     }
