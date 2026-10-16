@@ -231,6 +231,7 @@ export class ReviewUseCase {
       repoRoot,
       diff: scope.diff,
       changedFiles: filePaths,
+      fileContents,
       reviewContext,
       referenceGraph,
       symbolIndex,
