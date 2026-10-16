@@ -309,9 +309,11 @@ export function parseDetailedDiff(diff: string, defaultChangedFiles?: string[]):
     // Detect old file header: --- a/path or --- /dev/null
     if (line.startsWith('--- ')) {
       const raw = line.slice(4).trim();
-      if (raw !== '/dev/null') {
-        currentOldFile = path.normalize(raw.replace(/^[ab]\//, ''));
-      }
+      currentOldFile =
+        raw === '/dev/null' ? null : path.normalize(raw.replace(/^[ab]\//, ''));
+      currentNewFile = null;
+      currentMeta = null;
+      currentStatus = raw === '/dev/null' ? 'added' : 'modified';
       continue;
     }
 
