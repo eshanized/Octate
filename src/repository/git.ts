@@ -385,65 +385,135 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
 }
 
 /**
- * Generates a unified diff between two file contents.
+ * Splits text into logical lines without counting the final line terminator as a line.
+ */
+function splitContentLines(content: string): string[] {
+  if (content.length === 0) return [];
+  const lines = content.split('\n');
+  if (content.endsWith('\n')) lines.pop();
+  return lines;
+}
+
+type DiffOperation = {
+  kind: 'context' | 'remove' | 'add';
+  line: string;
+  oldLine: number;
+  newLine: number;
+};
+
+/**
+ * Creates a deterministic line edit script. LCS keeps ordinary source diffs
+ * readable; very large comparisons use a bounded prefix/suffix fallback.
+ */
+function createDiffOperations(oldLines: string[], newLines: string[]): DiffOperation[] {
+  let operations: DiffOperation[] = [];
+  if (oldLines.length * newLines.length <= 1_000_000) {
+    const lcs = Array.from({ length: oldLines.length + 1 }, () => new Uint32Array(newLines.length + 1));
+    for (let i = oldLines.length - 1; i >= 0; i--) {
+      const row = lcs[i];
+      const nextRow = lcs[i + 1];
+      if (!row || !nextRow) continue;
+      for (let j = newLines.length - 1; j >= 0; j--) {
+        row[j] = oldLines[i] === newLines[j]
+          ? (nextRow[j + 1] ?? 0) + 1
+          : Math.max(nextRow[j] ?? 0, row[j + 1] ?? 0);
+      }
+    }
+
+    let i = 0;
+    let j = 0;
+    let oldLine = 1;
+    let newLine = 1;
+    while (i < oldLines.length || j < newLines.length) {
+      if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+        operations.push({ kind: 'context', line: oldLines[i] ?? '', oldLine, newLine });
+        i++; j++; oldLine++; newLine++;
+      } else if (
+        i < oldLines.length &&
+        (j >= newLines.length || (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))
+      ) {
+        operations.push({ kind: 'remove', line: oldLines[i] ?? '', oldLine, newLine });
+        i++; oldLine++;
+      } else {
+        operations.push({ kind: 'add', line: newLines[j] ?? '', oldLine, newLine });
+        j++; newLine++;
+      }
+    }
+    return operations;
+  }
+
+  let prefix = 0;
+  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) suffix++;
+
+  let oldLine = 1;
+  let newLine = 1;
+  for (let k = 0; k < prefix; k++) {
+    operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++; newLine++;
+  }
+  for (let k = prefix; k < oldLines.length - suffix; k++) {
+    operations.push({ kind: 'remove', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++;
+  }
+  for (let k = prefix; k < newLines.length - suffix; k++) {
+    operations.push({ kind: 'add', line: newLines[k] ?? '', oldLine, newLine });
+    newLine++;
+  }
+  for (let k = oldLines.length - suffix; k < oldLines.length; k++) {
+    operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++; newLine++;
+  }
+  return operations;
+}
+
+/**
+ * Generates a unified diff with correctly counted lines and separate hunks.
  */
 function generateUnifiedDiff(filepath: string, oldContent: string, newContent: string): string {
-  const oldLines = oldContent.split('\n');
-  const newLines = newContent.split('\n');
+  const oldLines = splitContentLines(oldContent);
+  const newLines = splitContentLines(newContent);
+  const operations = createDiffOperations(oldLines, newLines);
+  const changedIndexes = operations
+    .map((operation, index) => operation.kind === 'context' ? -1 : index)
+    .filter((index) => index >= 0);
+  const diffLines = ['--- a/' + filepath, '+++ b/' + filepath];
+  if (changedIndexes.length === 0) return diffLines.join('\n');
 
-  // Simple diff algorithm - find common prefix and suffix
-  let prefixLen = 0;
-  while (
-    prefixLen < oldLines.length &&
-    prefixLen < newLines.length &&
-    oldLines[prefixLen] === newLines[prefixLen]
-  ) {
-    prefixLen++;
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const changedIndex of changedIndexes) {
+    const start = Math.max(0, changedIndex - 3);
+    const end = Math.min(operations.length, changedIndex + 4);
+    const previous = ranges[ranges.length - 1];
+    if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
+    else ranges.push({ start, end });
   }
 
-  let suffixLen = 0;
-  while (
-    suffixLen < oldLines.length - prefixLen &&
-    suffixLen < newLines.length - prefixLen &&
-    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
-  ) {
-    suffixLen++;
+  const oldHasFinalNewline = oldContent.endsWith('\n');
+  const newHasFinalNewline = newContent.endsWith('\n');
+  for (const range of ranges) {
+    const hunk = operations.slice(range.start, range.end);
+    const first = hunk[0];
+    if (!first) continue;
+    const oldCount = hunk.filter((operation) => operation.kind !== 'add').length;
+    const newCount = hunk.filter((operation) => operation.kind !== 'remove').length;
+    const oldStart = oldCount === 0 ? Math.max(0, first.oldLine - 1) : first.oldLine;
+    const newStart = newCount === 0 ? Math.max(0, first.newLine - 1) : first.newLine;
+    diffLines.push('@@ -' + oldStart + ',' + oldCount + ' +' + newStart + ',' + newCount + ' @@');
+
+    for (const operation of hunk) {
+      const prefix = operation.kind === 'context' ? ' ' : operation.kind === 'remove' ? '-' : '+';
+      diffLines.push(prefix + operation.line);
+      const oldHasNoNewline = operation.kind !== 'add' && operation.oldLine === oldLines.length && !oldHasFinalNewline;
+      const newHasNoNewline = operation.kind !== 'remove' && operation.newLine === newLines.length && !newHasFinalNewline;
+      if (oldHasNoNewline || newHasNoNewline) diffLines.push('\\ No newline at end of file');
+    }
   }
-
-  const oldStart = prefixLen + 1;
-  const oldCount = oldLines.length - prefixLen - suffixLen;
-  const newStart = prefixLen + 1;
-  const newCount = newLines.length - prefixLen - suffixLen;
-
-  const diffLines: string[] = [];
-  diffLines.push(`--- a/${filepath}`);
-  diffLines.push(`+++ b/${filepath}`);
-  diffLines.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`);
-
-  // Context lines before changes
-  for (let i = Math.max(0, prefixLen - 3); i < prefixLen; i++) {
-    diffLines.push(` ${oldLines[i]}`);
-  }
-
-  // Removed lines
-  for (let i = prefixLen; i < oldLines.length - suffixLen; i++) {
-    diffLines.push(`-${oldLines[i]}`);
-  }
-
-  // Added lines
-  for (let i = prefixLen; i < newLines.length - suffixLen; i++) {
-    diffLines.push(`+${newLines[i]}`);
-  }
-
-  // Context lines after changes
-  for (
-    let i = oldLines.length - suffixLen;
-    i < Math.min(oldLines.length, oldLines.length - suffixLen + 3);
-    i++
-  ) {
-    diffLines.push(` ${oldLines[i]}`);
-  }
-
   return diffLines.join('\n');
 }
 
@@ -451,16 +521,12 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
  * Generates diff for added file.
  */
 function generateAddedDiff(filepath: string, content: string): string {
-  const lines = content.split('\n');
-  const diffLines: string[] = [];
-  diffLines.push(`--- /dev/null`);
-  diffLines.push(`+++ b/${filepath}`);
-  diffLines.push(`@@ -0,0 +1,${lines.length} @@`);
-
-  for (const line of lines) {
-    diffLines.push(`+${line}`);
+  const lines = splitContentLines(content);
+  const diffLines = ['--- /dev/null', '+++ b/' + filepath, '@@ -0,0 +'+ (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' @@'];
+  for (let index = 0; index < lines.length; index++) {
+    diffLines.push('+' + (lines[index] ?? ''));
+    if (index === lines.length - 1 && !content.endsWith('\n')) diffLines.push('\\ No newline at end of file');
   }
-
   return diffLines.join('\n');
 }
 
@@ -468,16 +534,12 @@ function generateAddedDiff(filepath: string, content: string): string {
  * Generates diff for deleted file.
  */
 function generateDeletedDiff(filepath: string, content: string): string {
-  const lines = content.split('\n');
-  const diffLines: string[] = [];
-  diffLines.push(`--- a/${filepath}`);
-  diffLines.push(`+++ /dev/null`);
-  diffLines.push(`@@ -1,${lines.length} +0,0 @@`);
-
-  for (const line of lines) {
-    diffLines.push(`-${line}`);
+  const lines = splitContentLines(content);
+  const diffLines = ['--- a/' + filepath, '+++ /dev/null', '@@ -' + (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' +0,0 @@'];
+  for (let index = 0; index < lines.length; index++) {
+    diffLines.push('-' + (lines[index] ?? ''));
+    if (index === lines.length - 1 && !content.endsWith('\n')) diffLines.push('\\ No newline at end of file');
   }
-
   return diffLines.join('\n');
 }
 
