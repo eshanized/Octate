@@ -107,9 +107,9 @@ describe('Git operations', () => {
       await git.add({ fs, dir: testDir, filepath: 'file1.ts' });
       await fs.writeFile(path.join(testDir, 'file1.ts'), 'export const a = 3;\n');
 
-      await expect(
-        readFileAtReviewScope(testDir, 'staged', 'INDEX', 'file1.ts')
-      ).resolves.toBe('export const a = 2;\n');
+      await expect(readFileAtReviewScope(testDir, 'staged', 'INDEX', 'file1.ts')).resolves.toBe(
+        'export const a = 2;\n'
+      );
     });
   });
 
