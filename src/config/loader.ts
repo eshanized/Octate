@@ -59,7 +59,9 @@ export async function loadProjectConfigLayer(configPath?: string): Promise<Parti
     return PartialOctateConfigSchema.parse(parse(content));
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const issues = error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+      const issues = error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ');
       throw new ConfigurationError(`Invalid octate.yaml: ${issues}`, { filePath, issues });
     }
     throw new ConfigurationError(
