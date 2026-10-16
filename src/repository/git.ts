@@ -658,7 +658,7 @@ async function readBlobAtCommit(
 async function readIndexOids(gitDir: string): Promise<Map<string, string>> {
   const entries = await GitIndexManager.acquire(
     { fs: indexFs, gitdir: gitDir, cache: {} },
-    (index) =>
+    (index: { entries: Array<{ path: string; oid: string; flags: { stage: number } }> }) =>
       index.entries
         .filter((entry) => entry.flags.stage === 0)
         .map((entry) => ({ filepath: entry.path, oid: entry.oid }))
