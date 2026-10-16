@@ -17,8 +17,8 @@ import {
 } from '../intelligence/index.js';
 import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
-import { createFileFilter } from '../repository/filter.js';
 import { findGitRoot } from '../repository/discovery.js';
+import { createFileFilter } from '../repository/filter.js';
 import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
@@ -278,11 +278,14 @@ export class ReviewUseCase {
 
     // Stages 6-8: review:dag, review:critic, review:rank (Steps 6-8/8)
     signal?.throwIfAborted();
-    const model = options.modelOverride ?? new LocalNvidiaProvider({
-      repoRoot,
-      fileContents,
-      readFileAtScope: (file) => readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
-    });
+    const model =
+      options.modelOverride ??
+      new LocalNvidiaProvider({
+        repoRoot,
+        fileContents,
+        readFileAtScope: (file) =>
+          readFileAtReviewScope(repoRoot, scope.type, scope.head, file),
+      });
     const engine = createReviewEngine();
 
     const result = await engine.run({
