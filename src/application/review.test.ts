@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import * as git from 'isomorphic-git';
+import { DefaultConfig } from '../config/schema.js';
 import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
 import { createReviewUseCase, ReviewUseCase } from './review.js';
 import type { CanonicalReviewStage, ReviewProgressEvent } from './types.js';
@@ -58,6 +59,25 @@ describe('application:review', () => {
     const stages = events.map((e) => e.stage);
     expect(stages).toContain('git:read');
     expect(stages).not.toContain('index:update');
+  });
+
+  it('applies ignore patterns before parsing or invoking the model', async () => {
+    await fs.writeFile(path.join(testDir, '.octateignore'), 'ignored.ts\\n');
+    await fs.writeFile(path.join(testDir, 'ignored.ts'), 'export const ignored = true;\\n');
+
+    const result = await useCase.execute({
+      repoRoot: testDir,
+      modelOverride: model,
+      config: {
+        ...DefaultConfig,
+        project: { name: 'test-project' },
+        ignore: ['ignored.ts'],
+      },
+    });
+
+    expect(result.summary.filesAnalyzed).toBe(0);
+    expect(result.findings).toEqual([]);
+    expect(model.calls).toHaveLength(0);
   });
 
   it('sequentially invokes and emits all 8 canonical stages with step counters', async () => {
