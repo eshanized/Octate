@@ -7,8 +7,8 @@ import { createLogger } from '../logging/index.js';
 import {
   DefaultConfig,
   type OctateConfig,
-  type PartialOctateConfig,
   OctateConfigSchema,
+  type PartialOctateConfig,
   PartialOctateConfigSchema,
 } from './schema.js';
 
@@ -50,9 +50,7 @@ export async function findConfigFile(startDir: string = process.cwd()): Promise<
  * This form is used for precedence merging so omitted values don't override
  * explicit values from the global configuration.
  */
-export async function loadProjectConfigLayer(
-  configPath?: string
-): Promise<PartialOctateConfig> {
+export async function loadProjectConfigLayer(configPath?: string): Promise<PartialOctateConfig> {
   const filePath = configPath ?? (await findConfigFile());
   if (!filePath) return {};
 
@@ -117,8 +115,13 @@ export async function loadGlobalConfigLayer(): Promise<PartialOctateConfig> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
     if (error instanceof z.ZodError) {
-      const issues = error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
-      throw new ConfigurationError(`Invalid global config: ${issues}`, { filePath: configPath, issues });
+      const issues = error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ');
+      throw new ConfigurationError(`Invalid global config: ${issues}`, {
+        filePath: configPath,
+        issues,
+      });
     }
     throw new ConfigurationError(
       `Failed to load global config from ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
