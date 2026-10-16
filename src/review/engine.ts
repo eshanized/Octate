@@ -48,6 +48,12 @@ export class ReviewEngine {
       (input.model as { modelId?: string }).modelId ??
       'unknown';
 
+    const evidenceFileReader =
+      input.readFileAtScope ??
+      (input.fileContents
+        ? async (file: string) => input.fileContents?.get(file) ?? null
+        : undefined);
+
     // Fast short-circuit on empty diff or zero files
     if (!input.diff.trim() || input.changedFiles.length === 0) {
       log.info('Empty diff or no changed files provided; short-circuiting review');
@@ -176,7 +182,7 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
-      getFileContent: async (file) => input.fileContents?.get(file) ?? null,
+      ...(evidenceFileReader ? { getFileContent: evidenceFileReader } : {}),
     });
     // results is keyed by the original finding objects, while findings contains validated copies.
     // Preserve the positional relationship and fail closed if a validation result is missing.
