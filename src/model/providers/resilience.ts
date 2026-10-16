@@ -123,7 +123,10 @@ function isRetryableNetworkError(error: ErrorWithHttpMetadata): boolean {
     cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string'
       ? cause.code
       : undefined;
-  if ((code && NETWORK_ERROR_CODES.has(code)) || (causeCode && NETWORK_ERROR_CODES.has(causeCode))) {
+  if (
+    (code && NETWORK_ERROR_CODES.has(code)) ||
+    (causeCode && NETWORK_ERROR_CODES.has(causeCode))
+  ) {
     return true;
   }
 
@@ -159,7 +162,10 @@ export class ResilienceManager {
     if (!Number.isSafeInteger(this.maxRetries) || this.maxRetries < 0) {
       throw new RangeError('maxRetries must be a non-negative safe integer');
     }
-    this.timeoutMs = requirePositiveInteger('timeoutMs', options?.timeoutMs ?? envTimeout ?? 120000);
+    this.timeoutMs = requirePositiveInteger(
+      'timeoutMs',
+      options?.timeoutMs ?? envTimeout ?? 120000
+    );
     this.concurrency = requirePositiveInteger('concurrency', options?.concurrency ?? 2);
     this.pool = createPromisePool(this.concurrency);
   }
@@ -203,7 +209,9 @@ export class ResilienceManager {
       try {
         return await operation(combinedSignal);
       } catch (err: unknown) {
-        const error = (err instanceof Error ? err : new Error(String(err))) as ErrorWithHttpMetadata;
+        const error = (
+          err instanceof Error ? err : new Error(String(err))
+        ) as ErrorWithHttpMetadata;
 
         // Check if caller aborted
         if (callerSignal?.aborted) {
