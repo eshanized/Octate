@@ -47,7 +47,10 @@ export async function findGitRoot(startDir: string = process.cwd()): Promise<str
           if (match?.[1]) {
             const resolvedGitDir = path.resolve(currentDir, match[1]);
             await fs.access(path.join(resolvedGitDir, 'HEAD'));
-            logger.debug({ gitRoot: currentDir, gitDir: resolvedGitDir }, 'Found Git worktree root');
+            logger.debug(
+              { gitRoot: currentDir, gitDir: resolvedGitDir },
+              'Found Git worktree root'
+            );
             return currentDir;
           }
         } catch {
