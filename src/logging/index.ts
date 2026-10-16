@@ -79,6 +79,15 @@ function createPinoLogger(options: LoggerOptions = {}): Logger {
  * Root logger instance.
  */
 export const logger = createPinoLogger();
+const childLoggers: Logger[] = [];
+
+/** Applies a runtime log level to the root and existing module loggers. */
+export function setLogLevel(level: LogLevel): void {
+  logger.level = level;
+  for (const child of childLoggers) {
+    child.level = level;
+  }
+}
 
 /**
  * Creates a child logger with module context.
@@ -89,7 +98,9 @@ export const logger = createPinoLogger();
  * @returns Child logger instance
  */
 export function createLogger(name: string, bindings?: Record<string, unknown>): Logger {
-  return logger.child({ module: name, ...bindings });
+  const child = logger.child({ module: name, ...bindings });
+  childLoggers.push(child);
+  return child;
 }
 
 /**
@@ -100,7 +111,9 @@ export function createLogger(name: string, bindings?: Record<string, unknown>): 
  * @returns Child logger with context
  */
 export function createContextLogger(name: string, context: Record<string, unknown>): Logger {
-  return logger.child({ module: name, ...context });
+  const child = logger.child({ module: name, ...context });
+  childLoggers.push(child);
+  return child;
 }
 
 /**
