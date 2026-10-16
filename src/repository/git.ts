@@ -379,9 +379,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
               oid: baseBlobOid,
             });
             const baseContent = decodeTextBlob(baseBlob.blob);
-            diff = baseContent === null
-              ? `# Binary file ${filepath} deleted\n`
-              : generateDeletedDiff(filepath, baseContent);
+            diff =
+              baseContent === null
+                ? `# Binary file ${filepath} deleted\n`
+                : generateDeletedDiff(filepath, baseContent);
           } catch {
             diff = `# Binary file ${filepath} deleted\n`;
           }
@@ -468,7 +469,8 @@ function createDiffOperations(oldLines: string[], newLines: string[]): DiffOpera
   let newLine = 1;
   for (let k = 0; k < prefix; k++) {
     operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
-    oldLine++; newLine++;
+    oldLine++;
+    newLine++;
   }
   for (let k = prefix; k < oldLines.length - suffix; k++) {
     operations.push({ kind: 'remove', line: oldLines[k] ?? '', oldLine, newLine });
@@ -513,7 +515,7 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
   }
 
   const changedIndexes = operations
-    .map((operation, index) => operation.kind === 'context' ? -1 : index)
+    .map((operation, index) => (operation.kind === 'context' ? -1 : index))
     .filter((index) => index >= 0);
   const diffLines = ['--- a/' + filepath, '+++ b/' + filepath];
   if (changedIndexes.length === 0) return diffLines.join('\n');
@@ -542,8 +544,14 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
     for (const operation of hunk) {
       const prefix = operation.kind === 'context' ? ' ' : operation.kind === 'remove' ? '-' : '+';
       diffLines.push(prefix + operation.line);
-      const oldHasNoNewline = operation.kind !== 'add' && operation.oldLine === oldLines.length && !oldHasFinalNewline;
-      const newHasNoNewline = operation.kind !== 'remove' && operation.newLine === newLines.length && !newHasFinalNewline;
+      const oldHasNoNewline =
+        operation.kind !== 'add' &&
+        operation.oldLine === oldLines.length &&
+        !oldHasFinalNewline;
+      const newHasNoNewline =
+        operation.kind !== 'remove' &&
+        operation.newLine === newLines.length &&
+        !newHasFinalNewline;
       if (oldHasNoNewline || newHasNoNewline) diffLines.push('\\ No newline at end of file');
     }
   }
@@ -558,7 +566,9 @@ function generateAddedDiff(filepath: string, content: string): string {
   const diffLines = ['--- /dev/null', '+++ b/' + filepath, '@@ -0,0 +'+ (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' @@'];
   for (let index = 0; index < lines.length; index++) {
     diffLines.push('+' + (lines[index] ?? ''));
-    if (index === lines.length - 1 && !content.endsWith('\n')) diffLines.push('\\ No newline at end of file');
+    if (index === lines.length - 1 && !content.endsWith('\n')) {
+      diffLines.push('\\ No newline at end of file');
+    }
   }
   return diffLines.join('\n');
 }
@@ -568,7 +578,11 @@ function generateAddedDiff(filepath: string, content: string): string {
  */
 function generateDeletedDiff(filepath: string, content: string): string {
   const lines = splitContentLines(content);
-  const diffLines = ['--- a/' + filepath, '+++ /dev/null', '@@ -' + (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' +0,0 @@'];
+  const diffLines = [
+    '--- a/' + filepath,
+    '+++ /dev/null',
+    '@@ -' + (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' +0,0 @@',
+  ];
   for (let index = 0; index < lines.length; index++) {
     diffLines.push('-' + (lines[index] ?? ''));
     if (index === lines.length - 1 && !content.endsWith('\n')) diffLines.push('\\ No newline at end of file');
@@ -612,7 +626,9 @@ export function filterDiffToFiles(diff: string, filePaths: readonly string[]): s
     const deletedPath = section.find((line) => line.startsWith('--- a/'))?.slice(6);
     const binaryLine = section.find((line) => line.startsWith('# Binary'));
     const binaryMatch = binaryLine
-      ? /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/.exec(binaryLine)
+      ? /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/.exec(
+          binaryLine
+        )
       : null;
     const filePath = (addedPath ?? deletedPath ?? binaryMatch?.[1])?.replace(/\\/g, '/');
     if (filePath && included.has(filePath)) kept.push(...section);
