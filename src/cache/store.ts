@@ -363,6 +363,3 @@ export async function createCacheStore(options: CacheStoreOptions): Promise<Cach
   await store.initialize();
   return store;
 }
-
-// Re-export access for internal use
-import { access } from 'node:fs/promises';
