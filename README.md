@@ -2,13 +2,13 @@
 
 <div align="center">
 
-[![Release](https://img.shields.io/github/v/release/vedanthq/Octate?color=blue&style=flat-square)](https://github.com/vedanthq/Octate/releases)
+[![Release](https://img.shields.io/github/v/release/eshanized/Octate?color=blue&style=flat-square)](https://github.com/eshanized/Octate/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522.0.0-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![NVIDIA AI](https://img.shields.io/badge/NVIDIA-Nemotron--3--Ultra-76B900?style=flat-square&logo=nvidia&logoColor=white)](https://build.nvidia.com)
 [![SARIF v2.1.0](https://img.shields.io/badge/SARIF-v2.1.0-blueviolet?style=flat-square)](https://sarifweb.azurewebsites.net/)
-[![Discussions](https://img.shields.io/badge/Discussions-Join-orange?style=flat-square&logo=github)](https://github.com/vedanthq/Octate/discussions)
+[![Discussions](https://img.shields.io/badge/Discussions-Join-orange?style=flat-square&logo=github)](https://github.com/eshanized/Octate/discussions)
 
 **Terminal-native AI code review CLI.** Deterministic repository intelligence meets LLM reasoning.
 
@@ -26,7 +26,7 @@ Octate is a developer-first, terminal-native AI code-review tool. Run `octate re
 - 🧠 **Multi-Stage Reviewer DAG:** Specialized reviewer roles (Security, Architecture, Performance, Correctness) reason in parallel over enriched contextual subgraphs.
 - 🛡️ **Two-Stage Critic Quality Gate:** Hard floor rules eliminate hallucinations and trivial linter noise; model critic cross-examines findings against codebase conventions.
 - 🖥️ **Interactive Terminal UI:** Built with Ink and React 19, featuring alternate screen buffer isolation, live progress streaming, diff inspection, and in-place re-reviews.
-- ⚡ **Local-First & Zero Token Waste:** Incremental caching and smart git diff pruning mean source code never leaves your workstation and reviews run in seconds.
+- ⚡ **Local-First Repository Processing:** Repository discovery, filtering, diff generation, and caching run locally. The review diff and selected context are sent to the configured model endpoint (NVIDIA-hosted by default) for AI analysis, so do not use a hosted endpoint for code that policy forbids sharing.
 - 📊 **Enterprise Automation:** First-class SARIF v2.1.0 output with GitHub Code Scanning integration, machine-parseable JSON, and configurable blocking exit codes.
 
 ---
@@ -156,7 +156,7 @@ graph TD
 2. **Analysis Layer:** Concrete syntax trees via Tree-sitter WASM with hybrid fallback to host static analysis tools.
 3. **Intelligence Layer:** Scope-bounded symbol indexes and deterministic cross-file reference graphs.
 4. **Model Provider:** OpenAI-compatible NVIDIA integrate endpoint supporting Nemotron 3 Ultra (`nvidia/nemotron-3-ultra-550b-a55b`).
-5. **Review Engine:** Parallel DAG scheduling with two-stage Critic (hard floor heuristics + LLM Critic) guaranteeing `< 30%` false-positive rate.
+5. **Review Engine:** Parallel DAG scheduling and a two-stage Critic (deterministic heuristics plus an LLM Critic) designed to suppress unsupported findings. Measure false-positive rates against your own labeled evaluation set rather than relying on an unverified universal guarantee.
 6. **Application Layer:** 8-stage canonical progress streaming with strict cancellation and exception traps.
 7. **Presentation Layer:** Full-screen Ink TUI with primary screen restoration guarantees and SARIF v2.1.0 generation.
 
