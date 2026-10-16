@@ -243,10 +243,14 @@ export class CacheStore {
     // Sort by creation time (oldest first)
     entries.sort((a, b) => a.createdAt - b.createdAt);
 
-    // Evict oldest entries until we have enough space
-    for (const entry of entries) {
-      // Never evict the entry being replaced; its size is already included in currentSize.
-      if (entry.path === protectedPath) continue;
+    const evictableEntries = entries.filter((entry) => entry.path !== protectedPath);
+    const reclaimableSize = evictableEntries.reduce((total, entry) => total + entry.size, 0);
+    if (this.currentSize + requiredSize - reclaimableSize > this.maxSize) {
+      throw new RangeError('Cache capacity exceeded; the new entry cannot fit without evicting the protected entry');
+    }
+
+    // Evict oldest entries until we have enough space.
+    for (const entry of evictableEntries) {
       if (this.currentSize + requiredSize <= this.maxSize) {
         break;
       }
