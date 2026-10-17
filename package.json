@@ -1,6 +1,6 @@
 {
   "name": "@tiverse/octate",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Terminal-native AI code review CLI. Deterministic repository intelligence meets LLM reasoning.",
   "type": "module",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/eshanized/Octate.git"
   },
-  "homepage": "https://github.com/eshanized/Octate#readme",
+  "homepage": "https://octate.tonmoyinfrastructure.org/",
   "bugs": {
     "url": "https://github.com/eshanized/Octate/issues"
   },
@@ -40,7 +40,7 @@
   "scripts": {
     "build": "tsc && node scripts/copy-wasm.cjs && chmod +x dist/cli.js",
     "copy:wasm": "node scripts/copy-wasm.cjs",
-    "pack:check": "npm run build && npm pack --dry-run",
+    "pack:check": "pnpm run check:release-metadata && pnpm run build && npm pack --dry-run",
     "bench": "tsx scripts/bench.ts",
     "dev": "tsx watch src/cli.ts",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
@@ -50,7 +50,8 @@
     "format": "biome format --write .",
     "check": "biome check --write .",
     "prepare": "husky install",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "check:release-metadata": "node scripts/check-release-metadata.cjs"
   },
   "dependencies": {
     "@microsoft/sarif": "latest",
