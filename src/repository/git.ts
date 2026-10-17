@@ -939,7 +939,7 @@ export async function listFilesAtReviewScope(
     const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
     return matrix
       .filter((entry) => entry[2] !== 0)
-      .map(([filepath]) => filepath.split('\\\\').join('/'))
+      .map(([filepath]) => filepath)
       .sort();
   }
 
@@ -961,7 +961,7 @@ export async function listFilesAtReviewScope(
       if (filepath === '.') return;
       const entry = entries[0];
       if (entry && (await entry.type()) === 'blob') {
-        files.add(filepath.split('\\\\').join('/'));
+        files.add(filepath);
       }
     },
   });
