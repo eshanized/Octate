@@ -68,7 +68,7 @@ export class SarifRenderer implements ReviewRenderer {
     runBuilder.initSimple({
       toolDriverName: 'Octate',
       toolDriverVersion: result.metadata.version || OCTATE_VERSION,
-      url: 'https://octate.dev',
+      url: 'https://octate.tonmoyinfrastructure.org/',
     });
 
     // Register distinct categories as SARIF rules
