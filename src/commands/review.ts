@@ -20,7 +20,7 @@ import { InteractiveTuiRenderer } from '../renderers/tui/renderer.js';
 import { shouldUseTui } from '../renderers/tui/terminal.js';
 import { findGitRoot } from '../repository/discovery.js';
 import { readFileAtReviewScope } from '../repository/git.js';
-import { parseRange, type resolveScope, type ScopeOptions } from '../repository/scope.js';
+import { parseRange, resolveScope, type ScopeOptions } from '../repository/scope.js';
 import type { ReviewResult } from '../review/types.js';
 
 const logger = createLogger('commands:review');
@@ -277,6 +277,7 @@ export async function runReview(
         scopeType: options.staged ? 'staged' : refs.length > 0 ? 'ref' : 'workspace',
         failOn: effectiveFailOn,
         loadFileContents: loadSnapshotFileContents,
+        loadDiff: async () => (await resolveScope(scopeOptions)).diff,
         onReReview: async () => {
           const freshResult = await useCase.execute({
             repoRoot,
