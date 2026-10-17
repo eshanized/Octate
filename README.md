@@ -1,6 +1,6 @@
 # Octate 🐙
 
-> Current version in `main`: **v1.1.0**. See the [changelog](CHANGELOG.md) and [v1.1.0 release notes](docs/releases/v1.1.0.md). The GitHub Release workflow publishes the `v1.1.0` tag and release from these notes after they land on `main`.
+> Package version: **v1.1.1**. Read the [changelog](https://github.com/eshanized/Octate/blob/main/CHANGELOG.md) and [v1.1.1 release notes](https://github.com/eshanized/Octate/blob/main/docs/releases/v1.1.1.md).
 
 <div align="center">
 
@@ -169,12 +169,12 @@ graph TD
 
 ## Documentation
 
-- [Changelog](CHANGELOG.md)
-- [v1.1.0 Release Notes](docs/releases/v1.1.0.md)
-- [Configuration Guide (`octate.yaml`)](docs/configuration.md)
-- [CI/CD Integration & GitHub Actions SARIF Setup](docs/ci-cd.md)
-- [Troubleshooting & Diagnostics](docs/troubleshooting.md)
-- [v1.0 Benchmark & Evaluation Report](.planning/phases/08-cli-integration-polish-evaluation/EVALUATION.md)
+- [Changelog](https://github.com/eshanized/Octate/blob/main/CHANGELOG.md)
+- [v1.1.1 Release Notes](https://github.com/eshanized/Octate/blob/main/docs/releases/v1.1.1.md)
+- [Configuration Guide (`octate.yaml`)](https://github.com/eshanized/Octate/blob/main/docs/configuration.md)
+- [CI/CD Integration & GitHub Actions SARIF Setup](https://github.com/eshanized/Octate/blob/main/docs/ci-cd.md)
+- [Troubleshooting & Diagnostics](https://github.com/eshanized/Octate/blob/main/docs/troubleshooting.md)
+- [v1.0 Benchmark & Evaluation Report](https://github.com/eshanized/Octate/blob/main/.planning/phases/08-cli-integration-polish-evaluation/EVALUATION.md)
 
 ---
 
