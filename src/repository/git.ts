@@ -935,14 +935,7 @@ export async function listFilesAtReviewScope(
     return Array.from((await readIndexOids(gitDir)).keys()).sort();
   }
 
-  const trees =
-    scopeType === 'working-tree'
-      ? [git.WORKDIR()]
-      : (() => {
-          throw new Error('historical tree must be resolved asynchronously');
-        })();
-
-  let targetTrees = trees;
+  let treeRef: string | undefined;
   if (scopeType !== 'working-tree') {
     const commitOid = await resolveRef(repoRoot, headRef);
     const commit = await git.readCommit({
@@ -951,8 +944,9 @@ export async function listFilesAtReviewScope(
       gitdir: gitDir,
       oid: commitOid,
     });
-    targetTrees = [git.TREE({ ref: commit.commit.tree })];
+    treeRef = commit.commit.tree;
   }
+  const targetTrees = treeRef ? [git.TREE({ ref: treeRef })] : [git.WORKDIR()];
 
   const files = new Set<string>();
   await git.walk({
