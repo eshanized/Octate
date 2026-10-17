@@ -1,6 +1,6 @@
 # Octate 🐙
 
-> Current development version: **v1.1.0**. Release publication follows the passing release workflow.
+> Current version in `main`: **v1.1.0**. See the [changelog](CHANGELOG.md) and [v1.1.0 release notes](docs/releases/v1.1.0.md). The GitHub release will be published separately.
 
 <div align="center">
 
@@ -169,6 +169,8 @@ graph TD
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md)
+- [v1.1.0 Release Notes](docs/releases/v1.1.0.md)
 - [Configuration Guide (`octate.yaml`)](docs/configuration.md)
 - [CI/CD Integration & GitHub Actions SARIF Setup](docs/ci-cd.md)
 - [Troubleshooting & Diagnostics](docs/troubleshooting.md)
