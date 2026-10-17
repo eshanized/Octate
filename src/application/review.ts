@@ -349,11 +349,6 @@ export class ReviewUseCase {
 }
 
 /**
- * Matches the workspace globs used by npm/yarn/pnpm against a repository-relative path.
- * This intentionally supports the common *, **, and ? operators without reading the
- * current worktree, so historical reviews do not inherit a newer workspace layout.
- */
-/**
  * Matches common npm/yarn/pnpm workspace glob syntax against a snapshot path.
  * Supports *, **, ?, and negative patterns without reading live worktree files.
  */
