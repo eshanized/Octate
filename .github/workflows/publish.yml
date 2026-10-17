@@ -10,9 +10,14 @@ on:
         required: false
         default: false
         type: boolean
+      version:
+        description: 'Expected package version for release publication'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: npm-publish-${{ github.ref }}
+  group: npm-publish-${{ github.event.release.tag_name || (inputs.version && format('v{0}', inputs.version)) || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -27,6 +32,27 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify requested release version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+
+          if [ -n "$REQUESTED_VERSION" ] && [ "$REQUESTED_VERSION" != "$package_version" ]; then
+            echo "::error::Requested release $REQUESTED_VERSION does not match package version $package_version."
+            exit 1
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            release_version="${GITHUB_REF_NAME#v}"
+            if [ "$release_version" != "$package_version" ]; then
+              echo "::error::Release tag version $release_version does not match package version $package_version."
+              exit 1
+            fi
+          fi
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
