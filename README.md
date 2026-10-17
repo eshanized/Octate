@@ -1,5 +1,7 @@
 # Octate 🐙
 
+> Current development version: **v1.1.0**. Release publication follows the passing release workflow.
+
 <div align="center">
 
 [![Release](https://img.shields.io/github/v/release/eshanized/Octate?color=blue&style=flat-square)](https://github.com/eshanized/Octate/releases)
