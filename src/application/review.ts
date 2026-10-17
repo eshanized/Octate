@@ -178,11 +178,7 @@ export class ReviewUseCase {
     const symbolIndex = createSymbolIndex(parseResult.files, fileContents);
     // Resolve imports against files that exist in the reviewed snapshot, not files
     // that happen to exist in the developer's current worktree.
-    const snapshotPaths = await listFilesAtReviewScope(
-      repoRoot,
-      scope.type,
-      scope.head ?? 'HEAD'
-    );
+    const snapshotPaths = await listFilesAtReviewScope(repoRoot, scope.type, scope.head ?? 'HEAD');
     const snapshotTsConfig = await readFileAtReviewScope(
       repoRoot,
       scope.type,
