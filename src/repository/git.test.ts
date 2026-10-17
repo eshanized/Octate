@@ -13,10 +13,10 @@ import {
   getParentCommit,
   getStagedDiff,
   getStagedFiles,
-  listFilesAtReviewScope,
   getStatus,
   getWorkingDiff,
   getWorkingFiles,
+  listFilesAtReviewScope,
   resolveRef,
 } from './git.js';
 
