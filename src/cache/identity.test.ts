@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import {
   computeConfigHash,
@@ -70,6 +70,42 @@ describe('computeProjectIdentity', () => {
     const hash = await computeProjectIdentity(repoRoot);
     expect(hash.length).toBe(16);
   });
+
+  it('normalizes relative and absolute paths to the same project identity', async () => {
+    const repoRoot = resolve(TEST_DIR, 'relative-identity');
+    await mkdir(resolve(repoRoot, '.git'), { recursive: true });
+    await writeFile(
+      resolve(repoRoot, '.git', 'config'),
+      '[remote "origin"]\n  url = https://example.com/relative.git\n'
+    );
+
+    const absoluteIdentity = await computeProjectIdentity(repoRoot);
+    const relativeIdentity = await computeProjectIdentity(relative(process.cwd(), repoRoot));
+    expect(relativeIdentity).toBe(absoluteIdentity);
+  });
+
+  it('reads remote configuration through a linked worktree gitdir', async () => {
+    const repoRoot = resolve(TEST_DIR, 'worktree-config');
+    const commonGitDir = resolve(TEST_DIR, 'common-worktree-config', '.git');
+    const worktreeGitDir = resolve(commonGitDir, 'worktrees', 'linked');
+    await mkdir(repoRoot, { recursive: true });
+    await mkdir(worktreeGitDir, { recursive: true });
+    await writeFile(resolve(worktreeGitDir, 'commondir'), '../..\n');
+    await writeFile(resolve(repoRoot, '.git'), `gitdir: ${worktreeGitDir}\n`);
+    await writeFile(
+      resolve(commonGitDir, 'config'),
+      '[remote "origin"]\n  url = https://example.com/first.git\n'
+    );
+
+    const firstHash = await computeProjectIdentity(repoRoot);
+    await writeFile(
+      resolve(commonGitDir, 'config'),
+      '[remote "origin"]\n  url = https://example.com/second.git\n'
+    );
+    const secondHash = await computeProjectIdentity(repoRoot);
+
+    expect(firstHash).not.toBe(secondHash);
+  });
 });
 
 describe('getCacheDir', () => {
@@ -125,13 +161,31 @@ describe('computeConfigHash', () => {
     expect(hash1).not.toBe(hash2);
   });
 
-  it('ignores default values', () => {
-    const configWithDefaults = { version: '1', review: { severity: 'medium', max_findings: 10 } };
-    const configWithoutDefaults = { review: { severity: 'high', max_findings: 20 } };
-    // Note: This test depends on the default value logic implementation
-    const hash1 = computeConfigHash(configWithDefaults);
-    const hash2 = computeConfigHash(configWithoutDefaults);
-    expect(hash1).not.toBe(hash2);
+  it('ignores current schema defaults and canonicalizes object key order', () => {
+    const configWithDefaults = {
+      version: '1.0.0',
+      project: { name: 'unnamed-project' },
+      review: {
+        severity: 'medium',
+        failOnSeverity: 'critical',
+        maxFindings: 50,
+        minConfidence: 0.6,
+      },
+      rules: [],
+      architecture: { boundaries: [], forbiddenDependencies: [] },
+      ignore: [],
+    };
+    expect(computeConfigHash(configWithDefaults)).toBe(computeConfigHash({}));
+
+    const left = { review: { maxFindings: 10, severity: 'high' }, project: { name: 'demo' } };
+    const right = { project: { name: 'demo' }, review: { severity: 'high', maxFindings: 10 } };
+    expect(computeConfigHash(left)).toBe(computeConfigHash(right));
+  });
+
+  it('changes hashes when a non-default policy changes', () => {
+    expect(computeConfigHash({ review: { severity: 'high' } })).not.toBe(
+      computeConfigHash({ review: { severity: 'low' } })
+    );
   });
 });
 

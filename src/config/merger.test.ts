@@ -63,6 +63,14 @@ describe('config/merger', () => {
       expect(envConfig.review?.severity).toBe('high');
       expect(envConfig.review?.maxFindings).toBe(25);
     });
+
+    it('parses top-level list settings', () => {
+      process.env.OCTATE_RULES = '["must check types"]';
+      process.env.OCTATE_IGNORE = '["dist/", "*.generated.ts"]';
+      const envConfig = parseEnvConfig();
+      expect(envConfig.rules).toEqual(['must check types']);
+      expect(envConfig.ignore).toEqual(['dist/', '*.generated.ts']);
+    });
   });
 
   describe('mergeConfigs', () => {
@@ -230,6 +238,29 @@ describe('config/merger', () => {
       expect(config.project.name).toBe('project-config'); // project wins
       expect(config.review.severity).toBe('high'); // env wins
       expect(config.review.maxFindings).toBe(10); // CLI wins
+    });
+
+    it('accepts a minimal global layer and preserves settings omitted by the project layer', async () => {
+      await writeFile(
+        join(testDir, 'octate.yaml'),
+        'version: "1.0.0"\nproject:\n  name: project-config\nreview:\n  severity: low\narchitecture: null\n'
+      );
+
+      const globalDir = join(testDir, '.config', 'octate');
+      await mkdir(globalDir, { recursive: true });
+      await writeFile(
+        join(globalDir, 'config.yaml'),
+        'review:\n  maxFindings: 12\n  failOnSeverity: high\narchitecture:\n  boundaries:\n    - global-boundary\n'
+      );
+      process.env.HOME = testDir;
+      process.env.XDG_CONFIG_HOME = join(testDir, '.config');
+
+      const config = await loadConfig();
+      expect(config.project.name).toBe('project-config');
+      expect(config.review.severity).toBe('low');
+      expect(config.review.maxFindings).toBe(12);
+      expect(config.review.failOnSeverity).toBe('high');
+      expect(config.architecture.boundaries).toEqual([]);
     });
   });
 });

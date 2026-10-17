@@ -50,6 +50,40 @@ describe('CacheStore', () => {
     expect(entry?.value).toEqual({ version: 2 });
   });
 
+  it('replaces overwritten entry size instead of accumulating it', async () => {
+    await store.set('same-key', 'x'.repeat(500));
+    const sizeWithLargeValue = await store.getSize();
+
+    await store.set('same-key', 'x');
+    const sizeWithSmallValue = await store.getSize();
+
+    expect(sizeWithSmallValue).toBeLessThan(sizeWithLargeValue);
+    expect((await store.get('same-key'))?.value).toBe('x');
+  });
+
+  it('rejects entries larger than the configured maximum', async () => {
+    const tiny = await createCacheStore({
+      rootDir: resolve(TEST_DIR, `tiny-${randomUUID()}`),
+      maxSize: 128,
+    });
+    await expect(tiny.set('too-large', 'x'.repeat(512))).rejects.toThrow(
+      'exceeds maximum cache size'
+    );
+    expect(await tiny.get('too-large')).toBeNull();
+    expect(await tiny.getSize()).toBe(0);
+  });
+
+  it('keeps concurrent writes within the size limit', async () => {
+    const smallStore = await createCacheStore({
+      rootDir: resolve(TEST_DIR, `concurrent-${randomUUID()}`),
+      maxSize: 5000,
+    });
+    await Promise.all(
+      Array.from({ length: 10 }, (_, index) => smallStore.set(`key-${index}`, 'x'.repeat(1200)))
+    );
+    expect(await smallStore.getSize()).toBeLessThanOrEqual(5000);
+  });
+
   it('deletes keys', async () => {
     await store.set('key1', 'value1');
     const deleted = await store.delete('key1');

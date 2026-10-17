@@ -96,7 +96,8 @@ describe('Phase 6: Context Engine & Token Budget Stress Tests', () => {
 
       const candidates: CandidateItem[] = [];
       for (let i = 0; i < 1200; i++) {
-        const type = candidateTypes[i % candidateTypes.length]!;
+        const type = candidateTypes[i % candidateTypes.length];
+        if (!type) throw new Error('expected a candidate type');
         candidates.push({
           file: `src/file_${i}.ts`,
           startLine: 1,
@@ -579,7 +580,8 @@ describe('Phase 7: Review Pipeline & Review DAG Stress Tests', () => {
       const consolidated = postCriticConsolidate(duplicates, symbolIndex);
       expect(consolidated.length).toBe(1);
 
-      const merged = consolidated[0]!;
+      const merged = consolidated[0];
+      if (!merged) throw new Error('expected a consolidated finding');
       expect(merged.severity).toBe('critical'); // Escalated to critical
       expect(merged.confidence).toBe(0.95); // Max confidence
       expect(merged.evidence.length).toBeLessThanOrEqual(5); // Evidence capped at 5

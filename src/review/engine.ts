@@ -130,6 +130,7 @@ export class ReviewEngine {
       symbolIndex: input.symbolIndex,
       diagnostics: input.diagnostics,
       model: input.model,
+      projectRules: input.projectRules,
       signal: input.signal,
     });
     input.onProgress?.({
@@ -176,10 +177,14 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
+      ...(input.readFileAtScope ? { getFileContent: input.readFileAtScope } : {}),
     });
-    const candidateFindingsForCritic = preCriticValidation.findings.filter((f) => {
-      const res = preCriticValidation.results.get(f);
-      return res ? res.evidenceStrength > 0 : true;
+    // Validation results are keyed by original objects, while findings are cloned
+    // with sanitized evidence. Use the same original finding to retrieve each result.
+    const candidateFindingsForCritic = preCriticValidation.findings.filter((_, index) => {
+      const original = preCriticFindings[index];
+      const result = original ? preCriticValidation.results.get(original) : undefined;
+      return result !== undefined && result.evidenceStrength > 0;
     });
 
     const criticResult = await executeCriticStage({
@@ -190,6 +195,7 @@ export class ReviewEngine {
       diagnostics: input.diagnostics,
       model: input.model,
       minConfidence: input.config?.minConfidence ?? 0.6,
+      projectRules: input.projectRules,
       signal: input.signal,
     });
     input.onProgress?.({
@@ -263,6 +269,7 @@ export class ReviewEngine {
       repoRoot: input.repoRoot,
       diff: input.diff,
       changedFiles: input.changedFiles,
+      ...(input.readFileAtScope ? { getFileContent: input.readFileAtScope } : {}),
     });
 
     const gateResult = runDecisionGate(rankedFindings, postRankValidation.results, {

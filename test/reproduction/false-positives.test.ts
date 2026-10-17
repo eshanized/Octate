@@ -44,7 +44,8 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
       });
 
       expect(ranked).toHaveLength(1);
-      const finding = ranked[0]!;
+      const finding = ranked[0];
+      if (!finding) throw new Error('expected one ranked finding');
 
       // With decoupled disposition: high severity alone NO LONGER blocks!
       // Only findings with finalDisposition === 'blocking' can block.
@@ -158,7 +159,8 @@ describe('Stage 1 Baseline Audit: False-Positive Reproductions', () => {
       });
 
       expect(ranked).toHaveLength(1);
-      const finding = ranked[0]!;
+      const finding = ranked[0];
+      if (!finding) throw new Error('expected one ranked finding');
 
       // With decoupled disposition: critical severity alone NO LONGER blocks!
       // Only findings with finalDisposition === 'blocking' can block.

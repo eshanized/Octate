@@ -6,14 +6,20 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as git from 'isomorphic-git';
+import { GitIndexManager } from 'isomorphic-git/managers';
+import { FileSystem } from 'isomorphic-git/models';
 import { createGitError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
-import type { FileChange } from '../types/index.js';
+import type { FileChange, ReviewScope } from '../types/index.js';
 
 const logger = createLogger('repository:git');
 
 // Use Node.js fs promises as the filesystem adapter
 const fsAdapter = fs;
+
+/** Internal sentinel that means compare a root commit against an empty tree. */
+export const EMPTY_TREE_BASE = 'octate::empty-tree';
+const indexFs = new FileSystem(fsAdapter);
 
 /**
  * Resolves a Git ref to a commit hash.
@@ -284,25 +290,26 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
   try {
     const gitDir = await findGitDir(repoRoot);
 
-    // Resolve refs to commit OIDs
-    const baseOid = await resolveRef(repoRoot, base);
+    // A root commit has no parent commit, so compare it to a real empty tree object.
+    const baseOid = base === EMPTY_TREE_BASE ? null : await resolveRef(repoRoot, base);
     const headOid = await resolveRef(repoRoot, head);
 
-    // Get the tree OIDs for both commits
-    const baseCommit = await git.readCommit({
-      fs: fsAdapter,
-      dir: repoRoot,
-      gitdir: gitDir,
-      oid: baseOid,
-    });
+    const baseTreeOid = baseOid
+      ? (
+          await git.readCommit({
+            fs: fsAdapter,
+            dir: repoRoot,
+            gitdir: gitDir,
+            oid: baseOid,
+          })
+        ).commit.tree
+      : await git.writeTree({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir, tree: [] });
     const headCommit = await git.readCommit({
       fs: fsAdapter,
       dir: repoRoot,
       gitdir: gitDir,
       oid: headOid,
     });
-
-    const baseTreeOid = baseCommit.commit.tree;
     const headTreeOid = headCommit.commit.tree;
 
     // Use walk to generate diff
@@ -324,9 +331,11 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
 
         const baseBlobOid = baseEntry ? await baseEntry.oid() : undefined;
         const headBlobOid = headEntry ? await headEntry.oid() : undefined;
+        const baseMode = baseEntry ? await baseEntry.mode() : undefined;
+        const headMode = headEntry ? await headEntry.mode() : undefined;
 
-        // Skip unchanged files
-        if (baseBlobOid === headBlobOid) return;
+        // File mode is part of the Git tree too (executable bit and symlink mode).
+        if (baseBlobOid === headBlobOid && baseMode === headMode) return;
 
         let status: FileChange['status'] = 'modified';
         if (baseBlobOid === undefined && headBlobOid !== undefined) status = 'added';
@@ -342,8 +351,10 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
               gitdir: gitDir,
               oid: headBlobOid,
             });
-            const headContent = Buffer.from(headBlob.blob).toString('utf-8');
-            if (status === 'added') {
+            const headContent = decodeTextBlob(headBlob.blob);
+            if (headContent === null) {
+              diff = `# Binary file ${filepath} differs\n`;
+            } else if (status === 'added') {
               diff = generateAddedDiff(filepath, headContent);
             } else if (baseBlobOid) {
               const baseBlob = await git.readBlob({
@@ -352,8 +363,11 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
                 gitdir: gitDir,
                 oid: baseBlobOid,
               });
-              const baseContent = Buffer.from(baseBlob.blob).toString('utf-8');
-              diff = generateUnifiedDiff(filepath, baseContent, headContent);
+              const baseContent = decodeTextBlob(baseBlob.blob);
+              diff =
+                baseContent === null
+                  ? `# Binary file ${filepath} differs\n`
+                  : generateUnifiedDiff(filepath, baseContent, headContent);
             }
           } catch {
             // Binary file or read error
@@ -367,14 +381,17 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
               gitdir: gitDir,
               oid: baseBlobOid,
             });
-            const baseContent = Buffer.from(baseBlob.blob).toString('utf-8');
-            diff = generateDeletedDiff(filepath, baseContent);
+            const baseContent = decodeTextBlob(baseBlob.blob);
+            diff =
+              baseContent === null
+                ? `# Binary file ${filepath} deleted\n`
+                : generateDeletedDiff(filepath, baseContent);
           } catch {
             diff = `# Binary file ${filepath} deleted\n`;
           }
         }
 
-        diffs.push(diff);
+        diffs.push(addModeMetadata(diff, status, baseMode, headMode));
       },
     });
 
@@ -385,65 +402,205 @@ export async function getDiff(repoRoot: string, base: string, head: string): Pro
 }
 
 /**
- * Generates a unified diff between two file contents.
+ * Adds Git file-mode metadata to a unified diff without creating a separate section.
+ */
+function addModeMetadata(
+  diff: string,
+  status: FileChange['status'],
+  baseMode: number | undefined,
+  headMode: number | undefined
+): string {
+  const modeString = (mode: number | undefined) =>
+    mode === undefined ? undefined : mode.toString(8).padStart(6, '0');
+
+  let metadata: string[] = [];
+  if (status === 'added' && headMode !== undefined) {
+    metadata = [`new file mode ${modeString(headMode)}`];
+  } else if (status === 'deleted' && baseMode !== undefined) {
+    metadata = [`deleted file mode ${modeString(baseMode)}`];
+  } else if (baseMode !== undefined && headMode !== undefined && baseMode !== headMode) {
+    metadata = [`old mode ${modeString(baseMode)}`, `new mode ${modeString(headMode)}`];
+  }
+
+  if (metadata.length === 0) return diff;
+  const lines = diff.split('\n');
+  const newHeaderIndex = lines.findIndex((line) => line.startsWith('+++ '));
+  if (newHeaderIndex < 0) return diff;
+  lines.splice(newHeaderIndex + 1, 0, ...metadata);
+  return lines.join('\n');
+}
+
+/**
+ * Splits text into logical lines without counting the final line terminator as a line.
+ */
+function splitContentLines(content: string): string[] {
+  if (content.length === 0) return [];
+  const lines = content.split('\n');
+  if (content.endsWith('\n')) lines.pop();
+  return lines;
+}
+
+type DiffOperation = {
+  kind: 'context' | 'remove' | 'add';
+  line: string;
+  oldLine: number;
+  newLine: number;
+};
+
+/**
+ * Creates a deterministic line edit script. LCS keeps ordinary source diffs
+ * readable; very large comparisons use a bounded prefix/suffix fallback.
+ */
+function createDiffOperations(oldLines: string[], newLines: string[]): DiffOperation[] {
+  let operations: DiffOperation[] = [];
+  if (oldLines.length * newLines.length <= 1_000_000) {
+    const lcs = Array.from(
+      { length: oldLines.length + 1 },
+      () => new Uint32Array(newLines.length + 1)
+    );
+    for (let i = oldLines.length - 1; i >= 0; i--) {
+      const row = lcs[i];
+      const nextRow = lcs[i + 1];
+      if (!row || !nextRow) continue;
+      for (let j = newLines.length - 1; j >= 0; j--) {
+        row[j] =
+          oldLines[i] === newLines[j]
+            ? (nextRow[j + 1] ?? 0) + 1
+            : Math.max(nextRow[j] ?? 0, row[j + 1] ?? 0);
+      }
+    }
+
+    let i = 0;
+    let j = 0;
+    let oldLine = 1;
+    let newLine = 1;
+    while (i < oldLines.length || j < newLines.length) {
+      if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+        operations.push({ kind: 'context', line: oldLines[i] ?? '', oldLine, newLine });
+        i++;
+        j++;
+        oldLine++;
+        newLine++;
+      } else if (
+        i < oldLines.length &&
+        (j >= newLines.length || (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))
+      ) {
+        operations.push({ kind: 'remove', line: oldLines[i] ?? '', oldLine, newLine });
+        i++;
+        oldLine++;
+      } else {
+        operations.push({ kind: 'add', line: newLines[j] ?? '', oldLine, newLine });
+        j++;
+        newLine++;
+      }
+    }
+    return operations;
+  }
+
+  let prefix = 0;
+  while (
+    prefix < oldLines.length &&
+    prefix < newLines.length &&
+    oldLines[prefix] === newLines[prefix]
+  ) {
+    prefix++;
+  }
+  let suffix = 0;
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+
+  let oldLine = 1;
+  let newLine = 1;
+  for (let k = 0; k < prefix; k++) {
+    operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++;
+    newLine++;
+  }
+  for (let k = prefix; k < oldLines.length - suffix; k++) {
+    operations.push({ kind: 'remove', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++;
+  }
+  for (let k = prefix; k < newLines.length - suffix; k++) {
+    operations.push({ kind: 'add', line: newLines[k] ?? '', oldLine, newLine });
+    newLine++;
+  }
+  for (let k = oldLines.length - suffix; k < oldLines.length; k++) {
+    operations.push({ kind: 'context', line: oldLines[k] ?? '', oldLine, newLine });
+    oldLine++;
+    newLine++;
+  }
+  return operations;
+}
+
+/**
+ * Generates a unified diff with correctly counted lines and separate hunks.
  */
 function generateUnifiedDiff(filepath: string, oldContent: string, newContent: string): string {
-  const oldLines = oldContent.split('\n');
-  const newLines = newContent.split('\n');
+  const oldLines = splitContentLines(oldContent);
+  const newLines = splitContentLines(newContent);
+  const operations = createDiffOperations(oldLines, newLines);
 
-  // Simple diff algorithm - find common prefix and suffix
-  let prefixLen = 0;
-  while (
-    prefixLen < oldLines.length &&
-    prefixLen < newLines.length &&
-    oldLines[prefixLen] === newLines[prefixLen]
+  // A final-newline-only change is still a real content change. Represent it
+  // as a remove/add pair so the unified diff carries the correct EOF marker.
+  if (
+    oldContent.endsWith('\n') !== newContent.endsWith('\n') &&
+    oldLines.length > 0 &&
+    newLines.length > 0 &&
+    oldLines[oldLines.length - 1] === newLines[newLines.length - 1]
   ) {
-    prefixLen++;
+    const last = operations[operations.length - 1];
+    if (last?.kind === 'context') {
+      operations.splice(
+        operations.length - 1,
+        1,
+        { kind: 'remove', line: last.line, oldLine: last.oldLine, newLine: last.newLine },
+        { kind: 'add', line: last.line, oldLine: last.oldLine, newLine: last.newLine }
+      );
+    }
   }
 
-  let suffixLen = 0;
-  while (
-    suffixLen < oldLines.length - prefixLen &&
-    suffixLen < newLines.length - prefixLen &&
-    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
-  ) {
-    suffixLen++;
+  const changedIndexes = operations
+    .map((operation, index) => (operation.kind === 'context' ? -1 : index))
+    .filter((index) => index >= 0);
+  const diffLines = ['--- a/' + filepath, '+++ b/' + filepath];
+  if (changedIndexes.length === 0) return diffLines.join('\n');
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const changedIndex of changedIndexes) {
+    const start = Math.max(0, changedIndex - 3);
+    const end = Math.min(operations.length, changedIndex + 4);
+    const previous = ranges[ranges.length - 1];
+    if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
+    else ranges.push({ start, end });
   }
 
-  const oldStart = prefixLen + 1;
-  const oldCount = oldLines.length - prefixLen - suffixLen;
-  const newStart = prefixLen + 1;
-  const newCount = newLines.length - prefixLen - suffixLen;
+  const oldHasFinalNewline = oldContent.endsWith('\n');
+  const newHasFinalNewline = newContent.endsWith('\n');
+  for (const range of ranges) {
+    const hunk = operations.slice(range.start, range.end);
+    const first = hunk[0];
+    if (!first) continue;
+    const oldCount = hunk.filter((operation) => operation.kind !== 'add').length;
+    const newCount = hunk.filter((operation) => operation.kind !== 'remove').length;
+    const oldStart = oldCount === 0 ? Math.max(0, first.oldLine - 1) : first.oldLine;
+    const newStart = newCount === 0 ? Math.max(0, first.newLine - 1) : first.newLine;
+    diffLines.push('@@ -' + oldStart + ',' + oldCount + ' +' + newStart + ',' + newCount + ' @@');
 
-  const diffLines: string[] = [];
-  diffLines.push(`--- a/${filepath}`);
-  diffLines.push(`+++ b/${filepath}`);
-  diffLines.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`);
-
-  // Context lines before changes
-  for (let i = Math.max(0, prefixLen - 3); i < prefixLen; i++) {
-    diffLines.push(` ${oldLines[i]}`);
+    for (const operation of hunk) {
+      const prefix = operation.kind === 'context' ? ' ' : operation.kind === 'remove' ? '-' : '+';
+      diffLines.push(prefix + operation.line);
+      const oldHasNoNewline =
+        operation.kind !== 'add' && operation.oldLine === oldLines.length && !oldHasFinalNewline;
+      const newHasNoNewline =
+        operation.kind !== 'remove' && operation.newLine === newLines.length && !newHasFinalNewline;
+      if (oldHasNoNewline || newHasNoNewline) diffLines.push('\\ No newline at end of file');
+    }
   }
-
-  // Removed lines
-  for (let i = prefixLen; i < oldLines.length - suffixLen; i++) {
-    diffLines.push(`-${oldLines[i]}`);
-  }
-
-  // Added lines
-  for (let i = prefixLen; i < newLines.length - suffixLen; i++) {
-    diffLines.push(`+${newLines[i]}`);
-  }
-
-  // Context lines after changes
-  for (
-    let i = oldLines.length - suffixLen;
-    i < Math.min(oldLines.length, oldLines.length - suffixLen + 3);
-    i++
-  ) {
-    diffLines.push(` ${oldLines[i]}`);
-  }
-
   return diffLines.join('\n');
 }
 
@@ -451,16 +608,17 @@ function generateUnifiedDiff(filepath: string, oldContent: string, newContent: s
  * Generates diff for added file.
  */
 function generateAddedDiff(filepath: string, content: string): string {
-  const lines = content.split('\n');
-  const diffLines: string[] = [];
-  diffLines.push(`--- /dev/null`);
-  diffLines.push(`+++ b/${filepath}`);
-  diffLines.push(`@@ -0,0 +1,${lines.length} @@`);
-
-  for (const line of lines) {
-    diffLines.push(`+${line}`);
+  const lines = splitContentLines(content);
+  const diffLines = [
+    '--- /dev/null',
+    '+++ b/' + filepath,
+    '@@ -0,0 +' + (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' @@',
+  ];
+  for (let index = 0; index < lines.length; index++) {
+    diffLines.push('+' + (lines[index] ?? ''));
+    if (index === lines.length - 1 && !content.endsWith('\n'))
+      diffLines.push('\\ No newline at end of file');
   }
-
   return diffLines.join('\n');
 }
 
@@ -468,17 +626,66 @@ function generateAddedDiff(filepath: string, content: string): string {
  * Generates diff for deleted file.
  */
 function generateDeletedDiff(filepath: string, content: string): string {
-  const lines = content.split('\n');
-  const diffLines: string[] = [];
-  diffLines.push(`--- a/${filepath}`);
-  diffLines.push(`+++ /dev/null`);
-  diffLines.push(`@@ -1,${lines.length} +0,0 @@`);
+  const lines = splitContentLines(content);
+  const diffLines = [
+    '--- a/' + filepath,
+    '+++ /dev/null',
+    '@@ -' + (lines.length === 0 ? 0 : 1) + ',' + lines.length + ' +0,0 @@',
+  ];
+  for (let index = 0; index < lines.length; index++) {
+    diffLines.push('-' + (lines[index] ?? ''));
+    if (index === lines.length - 1 && !content.endsWith('\n')) {
+      diffLines.push('\\ No newline at end of file');
+    }
+  }
+  return diffLines.join('\n');
+}
 
-  for (const line of lines) {
-    diffLines.push(`-${line}`);
+/**
+ * Keeps only unified-diff file sections whose paths passed repository filtering.
+ * Supports added/deleted files and the binary placeholders emitted by this module.
+ */
+export function filterDiffToFiles(diff: string, filePaths: readonly string[]): string {
+  const included = new Set(filePaths.map((file) => file.replace(/\\/g, '/')));
+  if (included.size === 0 || !diff) return '';
+
+  const sections: string[][] = [];
+  let current: string[] = [];
+  const flush = () => {
+    if (current.length > 0) sections.push(current);
+    current = [];
+  };
+
+  const diffLines = diff.split('\n');
+  for (let index = 0; index < diffLines.length; index++) {
+    const line = diffLines[index] ?? '';
+    const nextLine = diffLines[index + 1];
+    const isFileHeader =
+      (line.startsWith('--- a/') &&
+        (nextLine?.startsWith('+++ b/') || nextLine === '+++ /dev/null')) ||
+      (line === '--- /dev/null' && nextLine?.startsWith('+++ b/'));
+    if (isFileHeader || line.startsWith('# Binary')) {
+      flush();
+    }
+    current.push(line);
+  }
+  flush();
+
+  const kept: string[] = [];
+  for (const section of sections) {
+    const addedPath = section.find((line) => line.startsWith('+++ b/'))?.slice(6);
+    const deletedPath = section.find((line) => line.startsWith('--- a/'))?.slice(6);
+    const binaryLine = section.find((line) => line.startsWith('# Binary'));
+    const binaryMatch = binaryLine
+      ? /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/.exec(
+          binaryLine
+        )
+      : null;
+    const filePath = (addedPath ?? deletedPath ?? binaryMatch?.[1])?.replace(/\\/g, '/');
+    if (filePath && included.has(filePath)) kept.push(...section);
   }
 
-  return diffLines.join('\n');
+  return kept.join('\n');
 }
 
 /**
@@ -496,23 +703,25 @@ export async function getChangedFiles(
 ): Promise<FileChange[]> {
   try {
     const gitDir = await findGitDir(repoRoot);
-    const baseOid = await resolveRef(repoRoot, base);
+    const baseOid = base === EMPTY_TREE_BASE ? null : await resolveRef(repoRoot, base);
     const headOid = await resolveRef(repoRoot, head);
 
-    const baseCommit = await git.readCommit({
-      fs: fsAdapter,
-      dir: repoRoot,
-      gitdir: gitDir,
-      oid: baseOid,
-    });
+    const baseTreeOid = baseOid
+      ? (
+          await git.readCommit({
+            fs: fsAdapter,
+            dir: repoRoot,
+            gitdir: gitDir,
+            oid: baseOid,
+          })
+        ).commit.tree
+      : await git.writeTree({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir, tree: [] });
     const headCommit = await git.readCommit({
       fs: fsAdapter,
       dir: repoRoot,
       gitdir: gitDir,
       oid: headOid,
     });
-
-    const baseTreeOid = baseCommit.commit.tree;
     const headTreeOid = headCommit.commit.tree;
 
     const changes: FileChange[] = [];
@@ -532,9 +741,10 @@ export async function getChangedFiles(
 
         const baseBlobOid = baseEntry ? await baseEntry.oid() : undefined;
         const headBlobOid = headEntry ? await headEntry.oid() : undefined;
+        const baseMode = baseEntry ? await baseEntry.mode() : undefined;
+        const headMode = headEntry ? await headEntry.mode() : undefined;
 
-        // Skip unchanged files
-        if (baseBlobOid === headBlobOid) return;
+        if (baseBlobOid === headBlobOid && baseMode === headMode) return;
 
         let status: FileChange['status'] = 'modified';
         if (baseBlobOid === undefined && headBlobOid !== undefined) status = 'added';
@@ -580,10 +790,242 @@ async function readBlobAtCommit(
       oid: commitOid,
       filepath,
     });
-    return Buffer.from(blob.blob).toString('utf-8');
+    return decodeTextBlob(blob.blob);
   } catch {
     return null;
   }
+}
+
+/**
+ * Reads the stage-0 blob OIDs from the Git index. Reading the object by OID
+ * avoids accidentally using the working-tree contents for staged changes.
+ */
+async function readIndexOids(gitDir: string): Promise<Map<string, string>> {
+  const entries: Array<{ filepath: string; oid: string }> = await GitIndexManager.acquire(
+    { fs: indexFs, gitdir: gitDir, cache: {} },
+    (index: { entries: Array<{ path: string; oid: string; flags: { stage: number } }> }) =>
+      index.entries
+        .filter((entry) => entry.flags.stage === 0)
+        .map((entry) => ({ filepath: entry.path, oid: entry.oid }))
+  );
+  return new Map(entries.map((entry) => [entry.filepath, entry.oid]));
+}
+
+/** Reads raw bytes for a Git blob OID. */
+async function readBlobAtOid(
+  repoRoot: string,
+  gitDir: string,
+  oid: string
+): Promise<Buffer | null> {
+  try {
+    const blob = await git.readBlob({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir, oid });
+    return Buffer.from(blob.blob);
+  } catch {
+    return null;
+  }
+}
+
+/** Decodes a text blob and returns null for binary or invalid UTF-8 data. */
+function decodeTextBlob(bytes: Uint8Array): string | null {
+  if (bytes.includes(0)) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads a worktree entry without following a file symlink outside the repository.
+ * Symlink blobs contain the link target text, not the content of the target file.
+ */
+async function readWorktreeBlob(repoRoot: string, filepath: string): Promise<Buffer | null> {
+  try {
+    const rootRealPath = await fs.realpath(repoRoot);
+    const absolutePath = path.resolve(rootRealPath, filepath);
+    const entryStat = await fs.lstat(absolutePath);
+    if (entryStat.isSymbolicLink()) {
+      return Buffer.from(await fs.readlink(absolutePath));
+    }
+
+    const realPath = await fs.realpath(absolutePath);
+    const relativePath = path.relative(rootRealPath, realPath);
+    if (
+      relativePath === '..' ||
+      relativePath.startsWith('..' + path.sep) ||
+      path.isAbsolute(relativePath)
+    ) {
+      return null;
+    }
+    return await fs.readFile(realPath);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Converts a model-provided path to a repository-relative Git path and blocks traversal.
+ */
+function normalizeScopeFilePath(repoRoot: string, filepath: string): string | null {
+  if (!filepath || filepath.includes('\0')) return null;
+
+  const absoluteRoot = path.resolve(repoRoot);
+  const portablePath = filepath.replace(/\\/g, path.sep);
+  const absoluteFile = path.resolve(absoluteRoot, portablePath);
+  const relativePath = path.relative(absoluteRoot, absoluteFile);
+  if (
+    !relativePath ||
+    relativePath === '..' ||
+    relativePath.startsWith('..' + path.sep) ||
+    path.isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+
+  return relativePath.split(path.sep).join('/');
+}
+
+/**
+ * Reads a file from the exact target snapshot of a review scope.
+ * Works for changed files and unchanged context while preventing repository escape.
+ */
+export async function readFileAtReviewScope(
+  repoRoot: string,
+  scopeType: ReviewScope['type'],
+  headRef: string,
+  filepath: string
+): Promise<string | null> {
+  const normalizedPath = normalizeScopeFilePath(repoRoot, filepath);
+  if (!normalizedPath) return null;
+
+  if (scopeType === 'working-tree') {
+    const bytes = await readWorktreeBlob(repoRoot, normalizedPath);
+    return bytes ? decodeTextBlob(bytes) : null;
+  }
+
+  const gitDir = await findGitDir(repoRoot);
+  if (scopeType === 'staged') {
+    const oid = (await readIndexOids(gitDir)).get(normalizedPath);
+    if (!oid) return null;
+    const blob = await readBlobAtOid(repoRoot, gitDir, oid);
+    return blob ? decodeTextBlob(blob) : null;
+  }
+
+  try {
+    const commitOid = await resolveRef(repoRoot, headRef);
+    return await readBlobAtCommit(repoRoot, gitDir, commitOid, normalizedPath);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lists regular files visible in the exact snapshot used by a review.
+ * Historical scopes are walked from the target commit tree, staged scopes use
+ * stage-0 index entries, and working-tree scopes use the Git workdir adapter.
+ */
+export async function listFilesAtReviewScope(
+  repoRoot: string,
+  scopeType: ReviewScope['type'],
+  headRef: string
+): Promise<string[]> {
+  const gitDir = await findGitDir(repoRoot);
+
+  if (scopeType === 'staged') {
+    return Array.from((await readIndexOids(gitDir)).keys()).sort();
+  }
+
+  if (scopeType === 'working-tree') {
+    const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
+    return matrix
+      .filter((entry) => entry[2] !== 0)
+      .map(([filepath]) => filepath)
+      .sort();
+  }
+
+  const commitOid = await resolveRef(repoRoot, headRef);
+  const commit = await git.readCommit({
+    fs: fsAdapter,
+    dir: repoRoot,
+    gitdir: gitDir,
+    oid: commitOid,
+  });
+  const files = new Set<string>();
+
+  await git.walk({
+    fs: fsAdapter,
+    dir: repoRoot,
+    gitdir: gitDir,
+    trees: [git.TREE({ ref: commit.commit.tree })],
+    map: async (filepath, entries) => {
+      if (filepath === '.') return;
+      const entry = entries[0];
+      if (entry && (await entry.type()) === 'blob') {
+        files.add(filepath);
+      }
+    },
+  });
+
+  return Array.from(files).sort();
+}
+
+/**
+ * Lists staged file changes by comparing HEAD with stage-0 index entries.
+ */
+export async function getStagedFiles(repoRoot: string): Promise<FileChange[]> {
+  const gitDir = await findGitDir(repoRoot);
+  const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
+  const changes: FileChange[] = [];
+
+  for (const entry of matrix) {
+    const filepath = entry[0];
+    const headStatus = entry[1];
+    const stageStatus = entry[3];
+    if (headStatus === stageStatus) continue;
+
+    const status: FileChange['status'] =
+      headStatus === 0 ? 'added' : stageStatus === 0 ? 'deleted' : 'modified';
+    changes.push({ path: filepath, status });
+  }
+
+  return changes;
+}
+
+/**
+ * Lists working-tree changes relative to the index by comparing raw bytes.
+ * Status-matrix values alone are insufficient for staged additions because
+ * their worktree/index status codes differ even when the bytes are identical.
+ */
+export async function getWorkingFiles(repoRoot: string): Promise<FileChange[]> {
+  const gitDir = await findGitDir(repoRoot);
+  const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
+  const indexOids = await readIndexOids(gitDir);
+  const changes: FileChange[] = [];
+
+  for (const entry of matrix) {
+    const filepath = entry[0];
+    const workdirStatus = entry[2];
+    const indexOid = indexOids.get(filepath);
+
+    if (workdirStatus === 0) {
+      if (indexOid) changes.push({ path: filepath, status: 'deleted' });
+      continue;
+    }
+
+    const workingBuffer = await readWorktreeBlob(repoRoot, filepath);
+    if (!workingBuffer) continue;
+    if (!indexOid) {
+      changes.push({ path: filepath, status: 'added' });
+      continue;
+    }
+
+    const indexBuffer = await readBlobAtOid(repoRoot, gitDir, indexOid);
+    if (!indexBuffer || !workingBuffer.equals(indexBuffer)) {
+      changes.push({ path: filepath, status: 'modified' });
+    }
+  }
+
+  return changes;
 }
 
 /**
@@ -602,68 +1044,53 @@ export async function getStagedDiff(repoRoot: string): Promise<string> {
       headOid = null;
     }
 
-    // Use statusMatrix to find staged changes
     const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
-
+    const indexOids = await readIndexOids(gitDir);
     const diffs: string[] = [];
 
     for (const entry of matrix) {
       const filepath = entry[0];
       const headStatus = entry[1] as 0 | 1;
-      const _workdirStatus = entry[2] as 0 | 1 | 2;
       const stageStatus = entry[3] as 0 | 1 | 2 | 3;
-
-      // Files where stage matches head must NOT be classified as staged changes
-      if (stageStatus === headStatus) {
-        continue;
-      }
+      if (stageStatus === headStatus) continue;
 
       let status: FileChange['status'] | undefined;
-      if (headStatus === 0 && stageStatus === 2) {
-        status = 'added';
-      } else if (headStatus === 1 && (stageStatus === 2 || stageStatus === 3)) {
-        status = 'modified';
-      } else if (headStatus === 1 && stageStatus === 0) {
-        status = 'deleted';
-      }
+      if (headStatus === 0 && stageStatus !== 0) status = 'added';
+      else if (headStatus === 1 && (stageStatus === 2 || stageStatus === 3)) status = 'modified';
+      else if (headStatus === 1 && stageStatus === 0) status = 'deleted';
+      if (!status) continue;
 
-      if (!status) {
-        continue;
-      }
-
-      let diff = '';
-      if (status !== 'deleted') {
-        // Read from working tree (which matches index for staged)
-        try {
-          const filePath = path.join(repoRoot, filepath);
-          const content = await fs.readFile(filePath, 'utf-8');
-          if (status === 'added' || !headOid) {
-            diff = generateAddedDiff(filepath, content);
-          } else {
-            // Read from HEAD for comparison
-            const headContent = await readBlobAtCommit(repoRoot, gitDir, headOid, filepath);
-            if (headContent !== null) {
-              diff = generateUnifiedDiff(filepath, headContent, content);
-            } else {
-              diff = generateAddedDiff(filepath, content);
-            }
-          }
-        } catch {
-          diff = `# Binary file ${filepath} differs\n`;
-        }
-      } else {
-        // Deleted file - read from HEAD
+      if (status === 'deleted') {
         const headContent = headOid
           ? await readBlobAtCommit(repoRoot, gitDir, headOid, filepath)
           : null;
-        if (headContent !== null) {
-          diff = generateDeletedDiff(filepath, headContent);
-        } else {
-          diff = `# Binary file ${filepath} deleted\n`;
-        }
+        diffs.push(
+          headContent === null
+            ? '# Binary file ' + filepath + ' deleted\n'
+            : generateDeletedDiff(filepath, headContent)
+        );
+        continue;
       }
 
-      diffs.push(diff);
+      const indexOid = indexOids.get(filepath);
+      const indexBuffer = indexOid ? await readBlobAtOid(repoRoot, gitDir, indexOid) : null;
+      const indexContent = indexBuffer ? decodeTextBlob(indexBuffer) : null;
+      if (indexContent === null) {
+        diffs.push('# Binary or unresolved index entry ' + filepath + ' differs\n');
+        continue;
+      }
+
+      if (status === 'added' || !headOid) {
+        diffs.push(generateAddedDiff(filepath, indexContent));
+        continue;
+      }
+
+      const headContent = await readBlobAtCommit(repoRoot, gitDir, headOid, filepath);
+      diffs.push(
+        headContent === null
+          ? '# Binary file ' + filepath + ' differs\n'
+          : generateUnifiedDiff(filepath, headContent, indexContent)
+      );
     }
 
     return diffs.join('\n');
@@ -681,63 +1108,57 @@ export async function getStagedDiff(repoRoot: string): Promise<string> {
 export async function getWorkingDiff(repoRoot: string): Promise<string> {
   try {
     const gitDir = await findGitDir(repoRoot);
-
-    // Use statusMatrix to find working tree changes
     const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
-    let headOid: string | null = null;
-    try {
-      headOid = await resolveRef(repoRoot, 'HEAD');
-    } catch {
-      headOid = null;
-    }
-
+    const indexOids = await readIndexOids(gitDir);
     const diffs: string[] = [];
 
     for (const entry of matrix) {
       const filepath = entry[0];
-      const _headStatus = entry[1];
       const workdirStatus = entry[2] as 0 | 1 | 2;
-      const stageStatus = entry[3] as 0 | 1 | 2 | 3;
+      const indexOid = indexOids.get(filepath);
 
-      // Clean files or files where workdir matches stage have no working tree changes
-      if (workdirStatus === stageStatus || (workdirStatus === 1 && stageStatus === 1)) {
+      if (workdirStatus === 0) {
+        if (!indexOid) continue;
+        const indexBuffer = await readBlobAtOid(repoRoot, gitDir, indexOid);
+        const indexContent = indexBuffer ? decodeTextBlob(indexBuffer) : null;
+        diffs.push(
+          indexContent === null
+            ? '# Binary file ' + filepath + ' deleted\n'
+            : generateDeletedDiff(filepath, indexContent)
+        );
         continue;
       }
 
-      if (workdirStatus === 0 && stageStatus !== 0) {
-        // Deleted in working tree
-        let diff = '';
-        const indexContent = headOid
-          ? await readBlobAtCommit(repoRoot, gitDir, headOid, filepath)
-          : null;
-        if (indexContent !== null) {
-          diff = generateDeletedDiff(filepath, indexContent);
-        } else {
-          diff = `# Binary file ${filepath} deleted\n`;
-        }
-        diffs.push(diff);
-      } else if (workdirStatus === 2) {
-        // Added or modified in working tree
-        let diff = '';
-        try {
-          const filePath = path.join(repoRoot, filepath);
-          const content = await fs.readFile(filePath, 'utf-8');
-
-          if (stageStatus === 0 || !headOid) {
-            diff = generateAddedDiff(filepath, content);
-          } else {
-            const indexContent = await readBlobAtCommit(repoRoot, gitDir, headOid, filepath);
-            if (indexContent !== null) {
-              diff = generateUnifiedDiff(filepath, indexContent, content);
-            } else {
-              diff = generateAddedDiff(filepath, content);
-            }
-          }
-        } catch {
-          diff = `# Binary file ${filepath} differs\n`;
-        }
-        diffs.push(diff);
+      const workingBuffer = await readWorktreeBlob(repoRoot, filepath);
+      if (!workingBuffer) {
+        // A disappearing file is handled as a deletion on the next status pass.
+        continue;
       }
+
+      if (!indexOid) {
+        const workingContent = decodeTextBlob(workingBuffer);
+        diffs.push(
+          workingContent === null
+            ? '# Binary file ' + filepath + ' added\n'
+            : generateAddedDiff(filepath, workingContent)
+        );
+        continue;
+      }
+
+      const indexBuffer = await readBlobAtOid(repoRoot, gitDir, indexOid);
+      if (!indexBuffer) {
+        diffs.push('# Binary file ' + filepath + ' differs\n');
+        continue;
+      }
+      if (workingBuffer.equals(indexBuffer)) continue;
+
+      const indexContent = decodeTextBlob(indexBuffer);
+      const workingContent = decodeTextBlob(workingBuffer);
+      diffs.push(
+        indexContent === null || workingContent === null
+          ? '# Binary file ' + filepath + ' differs\n'
+          : generateUnifiedDiff(filepath, indexContent, workingContent)
+      );
     }
 
     return diffs.join('\n');

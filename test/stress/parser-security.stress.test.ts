@@ -168,7 +168,7 @@ describe('Phase 4 & 5: Parser, Analysis & Security Stress Suite', () => {
         projectRules: ['No eval allowed'],
         repoMetadata: {
           root: '/test',
-          languages: { TypeScript: 1 },
+          languages: { ['TypeScript']: 1 },
           fileCount: 1,
           totalLines: 10,
         },

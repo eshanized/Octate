@@ -4,7 +4,7 @@
  * emitting the 8 canonical progress events and enforcing cancellation checks.
  */
 
-import { readFile } from 'node:fs/promises';
+import { parse as parseYaml } from 'yaml';
 import { collectDiagnostics } from '../analysis/diagnostics/index.js';
 import { parseFiles } from '../analysis/parser/index.js';
 import { extractSymbols } from '../analysis/symbols/index.js';
@@ -15,13 +15,21 @@ import {
   createPathResolver,
   createReferenceGraph,
   createSymbolIndex,
+  type WorkspaceInfo,
 } from '../intelligence/index.js';
 import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
 import { findGitRoot } from '../repository/discovery.js';
+import { createFileFilter, shouldReviewSnapshotContent } from '../repository/filter.js';
+import {
+  filterDiffToFiles,
+  listFilesAtReviewScope,
+  readFileAtReviewScope,
+} from '../repository/git.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
+import type { ReviewScope } from '../types/index.js';
 import { OCTATE_VERSION } from '../version.js';
 import type { CanonicalReviewStage, ReviewProgressStatus, ReviewUseCaseOptions } from './types.js';
 
@@ -76,64 +84,70 @@ export class ReviewUseCase {
 
     // Short-circuit on empty scope
     if (scope.files.length === 0) {
-      const durationMs = Date.now() - startTime;
       const modelName =
         (options.modelOverride as { modelName?: string } | undefined)?.modelName ??
         (options.modelOverride as { modelId?: string } | undefined)?.modelId ??
         'none';
-
-      return {
-        summary: {
-          totalFindings: 0,
-          bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
-          byCategory: {
-            correctness: 0,
-            security: 0,
-            performance: 0,
-            architecture: 0,
-            reliability: 0,
-            maintainability: 0,
-            compatibility: 0,
-            testing: 0,
-          },
-          byReviewer: {},
-          filesAnalyzed: 0,
-          durationMs,
-        },
-        findings: [],
-        metadata: {
-          scopeType: scope.type,
-          base: scope.base,
-          head: scope.head,
-          timestamp: new Date().toISOString(),
-          version: OCTATE_VERSION,
-          model: modelName,
-          totalTokens: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          warnings: [],
-          reviewersTriggered: [],
-          criticInvoked: false,
-          preCriticFindingCount: 0,
-          postCriticFindingCount: 0,
-        },
-      };
+      return createEmptyReviewResult(scope, modelName, Date.now() - startTime);
     }
 
-    const filePaths = scope.files.map((f) => f.path);
     const config = options.config ?? (await loadConfig({}));
+    const projectRules = [
+      ...config.rules.map((rule) => `Project rule: ${rule}`),
+      ...(config.architecture.boundaries.length > 0
+        ? [`Architecture boundaries to preserve: ${config.architecture.boundaries.join(', ')}`]
+        : []),
+      ...(config.architecture.forbiddenDependencies.length > 0
+        ? [
+            `Forbidden dependencies and dependency directions: ${config.architecture.forbiddenDependencies.join(', ')}`,
+          ]
+        : []),
+    ];
+    const fileFilter = await createFileFilter(repoRoot, {
+      additionalIgnorePatterns: config.ignore,
+    });
+    const shouldIncludeFile = fileFilter.createFilter();
+    const binaryPaths = new Set(
+      [
+        ...scope.diff.matchAll(
+          /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/gm
+        ),
+      ]
+        .map((match) => match[1])
+        .filter((filePath): filePath is string => filePath !== undefined)
+    );
+    const candidates = scope.files
+      .map((file) => file.path)
+      .filter((filePath) => shouldIncludeFile(filePath) && !binaryPaths.has(filePath));
 
-    // Read file contents for subsequent analysis and intelligence stages
-    const fileContents = new Map<string, string>();
+    // Read each changed file from its requested Git snapshot before applying
+    // content-based filters; never consult the worktree for staged/commit reviews.
+    const snapshotContents = new Map<string, string | null>();
     await Promise.all(
-      filePaths.map(async (file) => {
-        try {
-          const content = await readFile(`${repoRoot}/${file}`, 'utf-8');
-          fileContents.set(file, content);
-        } catch {
-          fileContents.set(file, '');
-        }
+      candidates.map(async (file) => {
+        snapshotContents.set(
+          file,
+          await readFileAtReviewScope(repoRoot, scope.type, scope.head, file)
+        );
       })
+    );
+
+    const filePaths = candidates.filter((filePath) =>
+      shouldReviewSnapshotContent(filePath, snapshotContents.get(filePath) ?? null)
+    );
+    const reviewDiff = filterDiffToFiles(scope.diff, filePaths);
+
+    // Ignore rules or content filters can remove every file from an otherwise valid Git scope.
+    if (filePaths.length === 0 || !reviewDiff.trim()) {
+      const modelName =
+        (options.modelOverride as { modelName?: string } | undefined)?.modelName ??
+        (options.modelOverride as { modelId?: string } | undefined)?.modelId ??
+        'none';
+      return createEmptyReviewResult(scope, modelName, Date.now() - startTime);
+    }
+
+    const fileContents = new Map<string, string>(
+      filePaths.map((file) => [file, snapshotContents.get(file) ?? ''])
     );
 
     const validFiles = filePaths.map((p) => ({
@@ -164,7 +178,56 @@ export class ReviewUseCase {
     emit('symbols:resolve', 'start', 'Resolving changed symbols & reference graph', 3);
     signal?.throwIfAborted();
     const symbolIndex = createSymbolIndex(parseResult.files, fileContents);
-    const pathResolver = await createPathResolver(repoRoot);
+    // Resolve imports against files that exist in the reviewed snapshot, not files
+    // that happen to exist in the developer's current worktree.
+    const snapshotPaths = await listFilesAtReviewScope(repoRoot, scope.type, scope.head ?? 'HEAD');
+    const snapshotTsConfig = await readFileAtReviewScope(
+      repoRoot,
+      scope.type,
+      scope.head ?? 'HEAD',
+      'tsconfig.json'
+    );
+    let tsconfigPaths: Record<string, string[]> = {};
+    let baseUrl = '.';
+    if (snapshotTsConfig) {
+      try {
+        const stripped = snapshotTsConfig
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/,(\s*[}\]])/g, '$1');
+        const parsed = JSON.parse(stripped) as {
+          compilerOptions?: { paths?: unknown; baseUrl?: unknown };
+        };
+        const paths = parsed.compilerOptions?.paths;
+        if (paths && typeof paths === 'object' && !Array.isArray(paths)) {
+          for (const [key, targets] of Object.entries(paths)) {
+            if (Array.isArray(targets) && targets.every((target) => typeof target === 'string')) {
+              tsconfigPaths[key] = targets;
+            }
+          }
+        }
+        const configuredBaseUrl = parsed.compilerOptions?.baseUrl;
+        if (typeof configuredBaseUrl === 'string') baseUrl = configuredBaseUrl;
+      } catch (error) {
+        logger.warn(
+          { scopeType: scope.type, error },
+          'Unable to parse tsconfig.json from the reviewed snapshot; path aliases are disabled'
+        );
+      }
+    }
+
+    const snapshotWorkspaces = await resolveWorkspaceInfosAtScope(
+      repoRoot,
+      scope.type,
+      scope.head ?? 'HEAD',
+      snapshotPaths
+    );
+    const pathResolver = await createPathResolver(repoRoot, {
+      knownFiles: new Set(snapshotPaths),
+      tsconfigPaths,
+      baseUrl,
+      workspaces: snapshotWorkspaces,
+    });
     const referenceGraph = createReferenceGraph(
       parseResult.files,
       symbolIndex,
@@ -185,10 +248,21 @@ export class ReviewUseCase {
     let diagnosticsResult: { diagnostics: import('../model/types.js').Diagnostic[] } = {
       diagnostics: [],
     };
+    const pipelineWarnings: string[] = [];
     try {
-      diagnosticsResult = await collectDiagnostics(parsedFilePaths, repoRoot, languages, signal);
+      if (scope.type === 'working-tree') {
+        diagnosticsResult = await collectDiagnostics(parsedFilePaths, repoRoot, languages, signal);
+      } else {
+        const warning =
+          'Filesystem-based diagnostics were skipped because they cannot safely analyze a historical Git snapshot.';
+        pipelineWarnings.push(warning);
+        logger.warn({ scopeType: scope.type, warning }, 'Skipping filesystem-based diagnostics');
+      }
     } catch (error) {
-      logger.warn({ error }, 'Diagnostic collection failed, continuing pipeline');
+      const warning =
+        'Diagnostic collection failed; review continued without filesystem-based diagnostics.';
+      pipelineWarnings.push(warning);
+      logger.warn({ error, warning }, 'Diagnostic collection failed, continuing pipeline');
     }
     const tDiagnostics = Date.now();
     emit(
@@ -205,11 +279,14 @@ export class ReviewUseCase {
     const contextEngine = createContextEngine();
     const reviewContext = await contextEngine.buildContext({
       changedFiles: filePaths,
-      diff: scope.diff,
+      diff: reviewDiff,
       symbolIndex,
       referenceGraph,
       diagnostics: diagnosticsResult.diagnostics,
-      readFile: async (file: string) => fileContents.get(file) ?? '',
+      readFile: async (file: string) => {
+        if (fileContents.has(file)) return fileContents.get(file) ?? '';
+        return (await readFileAtReviewScope(repoRoot, scope.type, scope.head, file)) ?? '';
+      },
     });
     const tContext = Date.now();
     emit(
@@ -229,14 +306,19 @@ export class ReviewUseCase {
 
     const result = await engine.run({
       repoRoot,
-      diff: scope.diff,
+      diff: reviewDiff,
       changedFiles: filePaths,
       reviewContext,
       referenceGraph,
       symbolIndex,
       diagnostics: diagnosticsResult.diagnostics,
       model,
+      projectRules,
       config: config.review,
+      readFileAtScope: async (file) => {
+        if (fileContents.has(file)) return fileContents.get(file) ?? '';
+        return readFileAtReviewScope(repoRoot, scope.type, scope.head, file);
+      },
       signal,
       onProgress: options.onProgress
         ? (e) => options.onProgress?.(e as unknown as import('./types.js').ReviewProgressEvent)
@@ -250,6 +332,7 @@ export class ReviewUseCase {
     const tEngine = Date.now();
     const totalMs = tEngine - startTime;
 
+    result.metadata.warnings = [...(result.metadata.warnings ?? []), ...pipelineWarnings];
     result.metadata.timings = {
       discoveryMs: tDiscovery - startTime,
       parseMs: tParse - tDiscovery,
@@ -263,6 +346,191 @@ export class ReviewUseCase {
 
     return result;
   }
+}
+
+/**
+ * Matches common npm/yarn/pnpm workspace glob syntax against a snapshot path.
+ * Supports *, **, ?, and negative patterns without reading live worktree files.
+ */
+function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boolean {
+  let pattern = rawPattern.trim();
+  if (pattern.startsWith('/')) pattern = pattern.slice(1);
+  while (pattern.endsWith('/')) pattern = pattern.slice(0, -1);
+  if (!pattern || pattern.startsWith('!')) return false;
+
+  let expression = '^';
+  const regexSpecial = '\\^$+?.()|{}[]';
+  for (let index = 0; index < pattern.length; index++) {
+    const character = pattern[index] ?? '';
+    const next = pattern[index + 1];
+    if (character === '*' && next === '*') {
+      if (pattern[index + 2] === '/') {
+        expression += '(?:.*/)?';
+        index += 2;
+      } else {
+        expression += '.*';
+        index++;
+      }
+    } else if (character === '*') {
+      expression += '[^/]*';
+    } else if (character === '?') {
+      expression += '[^/]';
+    } else {
+      expression += regexSpecial.includes(character)
+        ? String.fromCharCode(92) + character
+        : character;
+    }
+  }
+
+  expression += '$';
+  try {
+    return new RegExp(expression).test(workspacePath);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Derives workspace package names and paths from the same Git snapshot as the review.
+ * A missing or invalid workspace manifest disables workspace mapping rather than
+ * silently consulting the live worktree's package.json files.
+ */
+export async function resolveWorkspaceInfosAtScope(
+  repoRoot: string,
+  scopeType: ReviewScope['type'],
+  headRef: string,
+  snapshotPaths: readonly string[]
+): Promise<WorkspaceInfo[]> {
+  const readSnapshotJson = async (filePath: string): Promise<Record<string, unknown> | null> => {
+    const content = await readFileAtReviewScope(repoRoot, scopeType, headRef, filePath);
+    if (content === null) return null;
+    try {
+      const parsed: unknown = JSON.parse(content);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let workspacePatterns: string[] = [];
+  const pnpmWorkspace = await readFileAtReviewScope(
+    repoRoot,
+    scopeType,
+    headRef,
+    'pnpm-workspace.yaml'
+  );
+  if (pnpmWorkspace !== null) {
+    try {
+      const parsed: unknown = parseYaml(pnpmWorkspace);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Array.isArray((parsed as { packages?: unknown }).packages)
+      ) {
+        workspacePatterns = (parsed as { packages: unknown[] }).packages.filter(
+          (pattern): pattern is string => typeof pattern === 'string'
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        { scopeType, error },
+        'Unable to parse pnpm-workspace.yaml from the reviewed snapshot; workspace mapping is disabled'
+      );
+    }
+  } else {
+    const rootPackage = await readSnapshotJson('package.json');
+    const workspaces = rootPackage?.workspaces;
+    if (Array.isArray(workspaces)) {
+      workspacePatterns = workspaces.filter(
+        (pattern): pattern is string => typeof pattern === 'string'
+      );
+    } else if (
+      workspaces &&
+      typeof workspaces === 'object' &&
+      !Array.isArray(workspaces) &&
+      Array.isArray((workspaces as { packages?: unknown }).packages)
+    ) {
+      workspacePatterns = (workspaces as { packages: unknown[] }).packages.filter(
+        (pattern): pattern is string => typeof pattern === 'string'
+      );
+    }
+  }
+
+  const positivePatterns = workspacePatterns.filter((pattern) => !pattern.trim().startsWith('!'));
+  const negativePatterns = workspacePatterns
+    .filter((pattern) => pattern.trim().startsWith('!'))
+    .map((pattern) => pattern.trim().slice(1));
+  if (positivePatterns.length === 0) return [];
+
+  const workspaceDirs = new Set<string>();
+  for (const filePath of snapshotPaths) {
+    if (filePath === 'package.json' || !filePath.endsWith('/package.json')) continue;
+    const workspaceDir = filePath.slice(0, -'/package.json'.length);
+    if (
+      positivePatterns.some((pattern) => matchesWorkspacePattern(workspaceDir, pattern)) &&
+      !negativePatterns.some((pattern) => matchesWorkspacePattern(workspaceDir, pattern))
+    ) {
+      workspaceDirs.add(workspaceDir);
+    }
+  }
+
+  const workspaces: WorkspaceInfo[] = [];
+  for (const workspaceDir of Array.from(workspaceDirs).sort()) {
+    const packageJson = await readSnapshotJson(`${workspaceDir}/package.json`);
+    const name = packageJson?.name;
+    if (typeof name === 'string' && name.trim()) {
+      workspaces.push({ name: name.trim(), path: workspaceDir });
+    }
+  }
+  return workspaces;
+}
+/**
+ * Builds a consistent empty result for scopes with no reviewable files.
+ */
+function createEmptyReviewResult(
+  scope: ReviewScope,
+  modelName: string,
+  durationMs: number
+): ReviewResult {
+  return {
+    summary: {
+      totalFindings: 0,
+      bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      byCategory: {
+        correctness: 0,
+        security: 0,
+        performance: 0,
+        architecture: 0,
+        reliability: 0,
+        maintainability: 0,
+        compatibility: 0,
+        testing: 0,
+      },
+      byReviewer: {},
+      filesAnalyzed: 0,
+      durationMs,
+    },
+    findings: [],
+    metadata: {
+      scopeType: scope.type,
+      base: scope.base,
+      head: scope.head,
+      timestamp: new Date().toISOString(),
+      version: OCTATE_VERSION,
+      model: modelName,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      warnings: [],
+      reviewersTriggered: [],
+      criticInvoked: false,
+      preCriticFindingCount: 0,
+      postCriticFindingCount: 0,
+    },
+  };
 }
 
 /**

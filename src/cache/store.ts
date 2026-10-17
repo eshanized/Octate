@@ -3,8 +3,18 @@
  * Uses temp file + rename for atomicity.
  */
 
-import { createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  access,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rmdir,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DiagnosticCollection } from '../analysis/diagnostics/index.js';
 import type { Diagnostic } from '../model/types.js';
@@ -35,6 +45,8 @@ export class CacheStore {
   private maxSize: number;
   private currentSize: number = 0;
   private sizeInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
+  private mutationQueue: Promise<unknown> = Promise.resolve();
 
   constructor(options: CacheStoreOptions) {
     this.rootDir = options.rootDir;
@@ -46,10 +58,16 @@ export class CacheStore {
    */
   async initialize(): Promise<void> {
     if (this.sizeInitialized) return;
-
-    await mkdir(this.rootDir, { recursive: true });
-    this.currentSize = await this.calculateDirectorySize(this.rootDir);
-    this.sizeInitialized = true;
+    if (!this.initializationPromise) {
+      this.initializationPromise = (async () => {
+        await mkdir(this.rootDir, { recursive: true });
+        this.currentSize = await this.calculateDirectorySize(this.rootDir);
+        this.sizeInitialized = true;
+      })().finally(() => {
+        if (!this.sizeInitialized) this.initializationPromise = null;
+      });
+    }
+    await this.initializationPromise;
   }
 
   /**
@@ -96,70 +114,71 @@ export class CacheStore {
   async set<T>(key: string, value: T): Promise<void> {
     await this.initialize();
 
-    // First serialize without size to get the content size
-    const tempEntry: CacheEntry<T> = {
-      key,
-      value,
-      createdAt: Date.now(),
-      size: 0,
-    };
-    const tempSerialized = JSON.stringify(tempEntry);
-    const contentSize = Buffer.byteLength(tempSerialized, 'utf-8');
+    await this.runExclusive(async () => {
+      const filePath = this.keyToFilePath(key);
+      const dir = dirname(filePath);
+      await mkdir(dir, { recursive: true });
 
-    const entry: CacheEntry<T> = {
-      key,
-      value,
-      createdAt: Date.now(),
-      size: contentSize,
-    };
+      const entry: CacheEntry<T> = {
+        key,
+        value,
+        createdAt: Date.now(),
+        size: 0,
+      };
 
-    const serialized = JSON.stringify(entry);
-
-    // Check if we need to evict before writing
-    await this.ensureSpace(entry.size);
-
-    const filePath = this.keyToFilePath(key);
-    const dir = dirname(filePath);
-    await mkdir(dir, { recursive: true });
-
-    // Atomic write: write to temp file, then rename
-    const tempPath = `${filePath}.tmp.${createHash('sha256')
-      .update(key + Date.now().toString())
-      .digest('hex')
-      .substring(0, 8)}`;
-
-    try {
-      await writeFile(tempPath, serialized, 'utf-8');
-      await rename(tempPath, filePath);
-      this.currentSize += entry.size;
-    } catch (error) {
-      // Clean up temp file on error
-      try {
-        await unlink(tempPath);
-      } catch {
-        // Ignore cleanup errors
+      // Include the final size field in the persisted size and settle the digit-width.
+      let serialized = JSON.stringify(entry);
+      for (let iteration = 0; iteration < 8; iteration++) {
+        const actualSize = Buffer.byteLength(serialized, 'utf-8');
+        if (entry.size === actualSize) break;
+        entry.size = actualSize;
+        serialized = JSON.stringify(entry);
       }
-      throw error;
-    }
-  }
+      const serializedSize = Buffer.byteLength(serialized, 'utf-8');
+      if (serializedSize > this.maxSize) {
+        throw new RangeError(
+          `Cache entry exceeds maximum cache size (${serializedSize} > ${this.maxSize} bytes)`
+        );
+      }
 
+      let previousSize = 0;
+      try {
+        previousSize = (await stat(filePath)).size;
+      } catch {
+        // this is a new cache key
+      }
+
+      // Preserve the key being replaced while evicting other entries.
+      await this.ensureSpace(Math.max(0, serializedSize - previousSize), filePath);
+
+      const tempPath = `${filePath}.tmp.${randomUUID()}`;
+      try {
+        await writeFile(tempPath, serialized, 'utf-8');
+        await rename(tempPath, filePath);
+        this.currentSize = Math.max(0, this.currentSize - previousSize + serializedSize);
+      } catch (error) {
+        await unlink(tempPath).catch(() => undefined);
+        throw error;
+      }
+    });
+  }
   /**
    * Deletes a cache entry.
    */
   async delete(key: string): Promise<boolean> {
     await this.initialize();
-    const filePath = this.keyToFilePath(key);
-
-    try {
-      const stats = await stat(filePath);
-      await unlink(filePath);
-      this.currentSize -= stats.size;
-      return true;
-    } catch {
-      return false;
-    }
+    return this.runExclusive(async () => {
+      const filePath = this.keyToFilePath(key);
+      try {
+        const stats = await stat(filePath);
+        await unlink(filePath);
+        this.currentSize = Math.max(0, this.currentSize - stats.size);
+        return true;
+      } catch {
+        return false;
+      }
+    });
   }
-
   /**
    * Checks if a key exists in the cache.
    */
@@ -194,10 +213,11 @@ export class CacheStore {
    */
   async clear(): Promise<void> {
     await this.initialize();
-    await this.clearDirectory(this.rootDir);
-    this.currentSize = 0;
+    await this.runExclusive(async () => {
+      await this.clearDirectory(this.rootDir);
+      this.currentSize = 0;
+    });
   }
-
   /**
    * Recursively clears a directory.
    */
@@ -226,7 +246,7 @@ export class CacheStore {
    * Ensures there's enough space for a new entry.
    * Evicts LRU entries if necessary.
    */
-  private async ensureSpace(requiredSize: number): Promise<void> {
+  private async ensureSpace(requiredSize: number, protectedPath?: string): Promise<void> {
     if (this.currentSize + requiredSize <= this.maxSize) {
       return;
     }
@@ -239,14 +259,28 @@ export class CacheStore {
     // Sort by creation time (oldest first)
     entries.sort((a, b) => a.createdAt - b.createdAt);
 
-    // Evict oldest entries until we have enough space
+    // Evict oldest entries until we have enough space.
     for (const entry of entries) {
       if (this.currentSize + requiredSize <= this.maxSize) {
         break;
       }
+      if (protectedPath && entry.path === protectedPath) continue;
       await unlink(entry.path);
-      this.currentSize -= entry.size;
+      this.currentSize = Math.max(0, this.currentSize - entry.size);
     }
+  }
+
+  /**
+   * Serializes mutations so concurrent writes cannot overcommit capacity or
+   * corrupt size accounting. Failed operations do not poison the queue.
+   */
+  private runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationQueue.then(operation, operation);
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result as Promise<T>;
   }
 
   /**
@@ -349,6 +383,3 @@ export async function createCacheStore(options: CacheStoreOptions): Promise<Cach
   await store.initialize();
   return store;
 }
-
-// Re-export access for internal use
-import { access } from 'node:fs/promises';

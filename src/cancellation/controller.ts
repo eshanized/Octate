@@ -11,7 +11,7 @@ import type { AbortSignalLike } from '../model/types.js';
  */
 export class CancellationController {
   private abortController: AbortController;
-  private childSignals: AbortSignal[] = [];
+  private cleanupCallbacks: Array<() => void> = [];
 
   constructor() {
     this.abortController = new AbortController();
@@ -37,27 +37,38 @@ export class CancellationController {
    */
   createChildSignal(): AbortSignal {
     const childController = new AbortController();
+    const parentSignal = this.abortController.signal;
+    const handleParentAbort = () => childController.abort(parentSignal.reason);
+    const cleanup = () => parentSignal.removeEventListener('abort', handleParentAbort);
 
-    // When parent aborts, abort the child
-    if (this.abortController.signal.aborted) {
-      childController.abort(this.abortController.signal.reason);
+    if (parentSignal.aborted) {
+      childController.abort(parentSignal.reason);
     } else {
-      this.abortController.signal.addEventListener('abort', () => {
-        childController.abort(this.abortController.signal.reason);
-      });
+      parentSignal.addEventListener('abort', handleParentAbort, { once: true });
+      this.addCleanup(cleanup);
     }
-
-    this.childSignals.push(childController.signal);
+    childController.signal.addEventListener('abort', cleanup, { once: true });
     return childController.signal;
   }
 
   /**
-   * Aborts the controller and all child signals.
+   * Registers a callback to release resources when this controller is aborted.
+   */
+  addCleanup(callback: () => void): void {
+    if (this.abortController.signal.aborted) {
+      callback();
+      return;
+    }
+    this.cleanupCallbacks.push(callback);
+  }
+
+  /**
+   * Aborts the controller and releases listeners owned by this controller.
    */
   abort(reason?: unknown): void {
     this.abortController.abort(reason);
-    for (const childSignal of this.childSignals) {
-      // The child signals are aborted automatically via event listener
+    for (const cleanup of this.cleanupCallbacks.splice(0)) {
+      cleanup();
     }
   }
 
@@ -96,9 +107,9 @@ export function createCancellationController(parentSignal?: AbortSignal): Cancel
     if (parentSignal.aborted) {
       controller.abort(parentSignal.reason);
     } else {
-      parentSignal.addEventListener('abort', () => {
-        controller.abort(parentSignal.reason);
-      });
+      const handleParentAbort = () => controller.abort(parentSignal.reason);
+      parentSignal.addEventListener('abort', handleParentAbort, { once: true });
+      controller.addCleanup(() => parentSignal.removeEventListener('abort', handleParentAbort));
     }
   }
 

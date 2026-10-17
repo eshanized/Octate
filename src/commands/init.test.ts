@@ -2,10 +2,12 @@
  * Tests for commands/init.ts
  */
 
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { parse } from 'yaml';
+import { OctateConfigSchema } from '../config/schema.js';
 import { createInitCommand } from './init.js';
 
 describe('commands:init', () => {
@@ -57,10 +59,18 @@ describe('commands:init', () => {
   });
 
   describe('init command execution', () => {
-    it('creates octate.yaml with default content', async () => {
-      // We can't easily test the action without mocking fs and console
-      // This is tested via integration
-      expect(true).toBe(true);
+    it('creates a schema-valid octate.yaml with default content', async () => {
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await command.parseAsync([testDir], { from: 'user' });
+        const parsedYaml = parse(await readFile(join(testDir, 'octate.yaml'), 'utf-8'));
+        const config = OctateConfigSchema.parse(parsedYaml);
+        expect(config.project.name).toBe(testDir.split('/').pop());
+        expect(config.review.maxFindings).toBe(50);
+        expect(config.review.failOnSeverity).toBe('critical');
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
     it('fails when file exists without --force', async () => {
@@ -80,7 +90,16 @@ describe('commands:init', () => {
     });
 
     it('uses custom name with --name', async () => {
-      expect(true).toBe(true);
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        await command.parseAsync([testDir, '--name', 'custom-project'], { from: 'user' });
+        const config = OctateConfigSchema.parse(
+          parse(await readFile(join(testDir, 'octate.yaml'), 'utf-8'))
+        );
+        expect(config.project.name).toBe('custom-project');
+      } finally {
+        logSpy.mockRestore();
+      }
     });
   });
 

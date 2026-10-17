@@ -9,12 +9,14 @@ import { createGitError, createValidationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
 import type { FileChange, ReviewScope } from '../types/index.js';
 import {
+  EMPTY_TREE_BASE,
   findGitDir,
   getChangedFiles,
   getDiff,
-  getParentCommit,
   getStagedDiff,
+  getStagedFiles,
   getWorkingDiff,
+  getWorkingFiles,
   resolveRef,
 } from './git.js';
 
@@ -97,8 +99,16 @@ export async function resolveScope(options: ScopeOptions): Promise<ReviewScope> 
     case 'commit': {
       scopeType = 'commit';
       headRef = commit!;
-      // Get parent commit for base
-      baseRef = await getParentCommit(repoRoot, commit!);
+      const commitOid = await resolveRef(repoRoot, commit!);
+      const gitDir = await findGitDir(repoRoot);
+      const commitObject = await git.readCommit({
+        fs,
+        dir: repoRoot,
+        gitdir: gitDir,
+        oid: commitOid,
+      });
+      // The initial commit has no parent; compare its tree against the empty tree.
+      baseRef = commitObject.commit.parent[0] ?? EMPTY_TREE_BASE;
       diff = await getDiff(repoRoot, baseRef, headRef);
       files = await getChangedFiles(repoRoot, baseRef, headRef);
       break;
@@ -131,25 +141,31 @@ export async function resolveScope(options: ScopeOptions): Promise<ReviewScope> 
       scopeType = 'branch';
       headRef = branch;
       let compareRef = 'HEAD';
-      try {
-        const headOid = await resolveRef(repoRoot, 'HEAD');
-        const branchOid = await resolveRef(repoRoot, branch);
-        if (headOid === branchOid) {
+      const headOid = await resolveRef(repoRoot, 'HEAD');
+      const branchOid = await resolveRef(repoRoot, branch);
+
+      if (headOid === branchOid) {
+        let foundDefaultBase = false;
+        for (const candidate of ['main', 'master', 'refs/remotes/origin/HEAD']) {
           try {
-            await resolveRef(repoRoot, 'main');
-            compareRef = 'main';
-          } catch {
-            try {
-              await resolveRef(repoRoot, 'master');
-              compareRef = 'master';
-            } catch {
-              compareRef = 'HEAD';
+            const candidateOid = await resolveRef(repoRoot, candidate);
+            if (candidateOid !== branchOid) {
+              compareRef = candidate;
+              foundDefaultBase = true;
+              break;
             }
+          } catch {
+            // Try the next conventional default branch ref.
           }
         }
-      } catch {
-        // Fallback to comparing with HEAD
+
+        if (!foundDefaultBase) {
+          throw createValidationError(
+            `Cannot infer a base branch for "${branch}" because it points at HEAD and no main/master/origin HEAD ref exists; use --range BASE..HEAD`
+          );
+        }
       }
+
       baseRef = await findMergeBase(repoRoot, compareRef, branch);
       diff = await getDiff(repoRoot, baseRef, headRef);
       files = await getChangedFiles(repoRoot, baseRef, headRef);
@@ -176,82 +192,6 @@ export async function resolveScope(options: ScopeOptions): Promise<ReviewScope> 
 }
 
 /**
- * Gets staged files with their status.
- */
-async function getStagedFiles(repoRoot: string): Promise<FileChange[]> {
-  const gitDir = await findGitDir(repoRoot);
-  const matrix = await git.statusMatrix({ fs, dir: repoRoot, gitdir: gitDir });
-  const changes: FileChange[] = [];
-
-  for (const entry of matrix) {
-    const filepath = entry[0];
-    const head = entry[1];
-    const workdir = entry[2];
-    const stage = entry[3];
-
-    // Clean files where head === 1 && workdir === 1 && stage === 1 MUST NOT be classified as changed
-    if (head === 1 && workdir === 1 && stage === 1) {
-      continue;
-    }
-
-    if (stage !== head) {
-      let status: FileChange['status'] | undefined;
-      if (head === 0 && stage === 2) {
-        status = 'added';
-      } else if (head === 1 && (stage === 2 || stage === 3)) {
-        status = 'modified';
-      } else if (head === 1 && stage === 0) {
-        status = 'deleted';
-      }
-
-      if (status) {
-        changes.push({ path: filepath, status });
-      }
-    }
-  }
-
-  return changes;
-}
-
-/**
- * Gets working tree files with their status.
- */
-async function getWorkingFiles(repoRoot: string): Promise<FileChange[]> {
-  const gitDir = await findGitDir(repoRoot);
-  const matrix = await git.statusMatrix({ fs, dir: repoRoot, gitdir: gitDir });
-  const changes: FileChange[] = [];
-
-  for (const entry of matrix) {
-    const filepath = entry[0];
-    const head = entry[1];
-    const workdir = entry[2];
-    const stage = entry[3];
-
-    // Clean files where head === 1 && workdir === 1 && stage === 1 MUST NOT be classified as changed
-    if (head === 1 && workdir === 1 && stage === 1) {
-      continue;
-    }
-
-    if (workdir !== stage) {
-      let status: FileChange['status'] | undefined;
-      if (stage === 0 && workdir === 2) {
-        status = 'added';
-      } else if (((workdir as number) === 2 || (workdir as number) === 3) && stage !== 0) {
-        status = 'modified';
-      } else if (workdir === 0 && stage !== 0) {
-        status = 'deleted';
-      }
-
-      if (status) {
-        changes.push({ path: filepath, status });
-      }
-    }
-  }
-
-  return changes;
-}
-
-/**
  * Finds the merge base between two refs.
  */
 async function findMergeBase(repoRoot: string, ref1: string, ref2: string): Promise<string> {
@@ -273,8 +213,11 @@ async function findMergeBase(repoRoot: string, ref1: string, ref2: string): Prom
       return mergeBases[0];
     }
 
-    logger.warn({ ref1, ref2 }, 'No common merge base found, falling back to base ref');
-    return oid1;
+    throw createGitError('No common merge base found for the requested refs', {
+      repoRoot,
+      ref1,
+      ref2,
+    });
   } catch (error) {
     throw createGitError('Failed to find merge base', {
       repoRoot,
