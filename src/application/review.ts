@@ -19,7 +19,11 @@ import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
 import { findGitRoot } from '../repository/discovery.js';
 import { createFileFilter, shouldReviewSnapshotContent } from '../repository/filter.js';
-import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
+import {
+  filterDiffToFiles,
+  listFilesAtReviewScope,
+  readFileAtReviewScope,
+} from '../repository/git.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
@@ -172,7 +176,16 @@ export class ReviewUseCase {
     emit('symbols:resolve', 'start', 'Resolving changed symbols & reference graph', 3);
     signal?.throwIfAborted();
     const symbolIndex = createSymbolIndex(parseResult.files, fileContents);
-    const pathResolver = await createPathResolver(repoRoot);
+    // Resolve imports against files that exist in the reviewed snapshot, not files
+    // that happen to exist in the developer's current worktree.
+    const snapshotPaths = await listFilesAtReviewScope(
+      repoRoot,
+      scope.type,
+      scope.head ?? 'HEAD'
+    );
+    const pathResolver = await createPathResolver(repoRoot, {
+      knownFiles: new Set(snapshotPaths),
+    });
     const referenceGraph = createReferenceGraph(
       parseResult.files,
       symbolIndex,
