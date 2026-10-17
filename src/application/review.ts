@@ -353,15 +353,21 @@ export class ReviewUseCase {
  * This intentionally supports the common *, **, and ? operators without reading the
  * current worktree, so historical reviews do not inherit a newer workspace layout.
  */
+/**
+ * Matches common npm/yarn/pnpm workspace glob syntax against a snapshot path.
+ * Supports *, **, ?, and negative patterns without reading live worktree files.
+ */
 function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boolean {
-  const pattern = rawPattern.trim().replace(/^\\//, '').replace(/\\/$/, '');
+  let pattern = rawPattern.trim();
+  if (pattern.startsWith('/')) pattern = pattern.slice(1);
+  while (pattern.endsWith('/')) pattern = pattern.slice(0, -1);
   if (!pattern || pattern.startsWith('!')) return false;
 
   let expression = '^';
+  const regexSpecial = '\\^$+?.()|{}[]';
   for (let index = 0; index < pattern.length; index++) {
-    const character = pattern[index]!;
+    const character = pattern[index] ?? '';
     const next = pattern[index + 1];
-
     if (character === '*' && next === '*') {
       if (pattern[index + 2] === '/') {
         expression += '(?:.*/)?';
@@ -375,69 +381,21 @@ function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boo
     } else if (character === '?') {
       expression += '[^/]';
     } else {
-      expression += character.replace(/[|\\{}()[\\]^$+?.]/g, '\\\\/**
- * Builds a consistent empty result for scopes with no reviewable files.
- */');
+      expression += regexSpecial.includes(character) ? String.fromCharCode(92) + character : character;
     }
   }
 
-  expression += '
-function createEmptyReviewResult(
-  scope: ReviewScope,
-  modelName: string,
-  durationMs: number
-): ReviewResult {
-  return {
-    summary: {
-      totalFindings: 0,
-      bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
-      byCategory: {
-        correctness: 0,
-        security: 0,
-        performance: 0,
-        architecture: 0,
-        reliability: 0,
-        maintainability: 0,
-        compatibility: 0,
-        testing: 0,
-      },
-      byReviewer: {},
-      filesAnalyzed: 0,
-      durationMs,
-    },
-    findings: [],
-    metadata: {
-      scopeType: scope.type,
-      base: scope.base,
-      head: scope.head,
-      timestamp: new Date().toISOString(),
-      version: OCTATE_VERSION,
-      model: modelName,
-      totalTokens: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      warnings: [],
-      reviewersTriggered: [],
-      criticInvoked: false,
-      preCriticFindingCount: 0,
-      postCriticFindingCount: 0,
-    },
-  };
-}
-
-/**
- * Factory function creating a new ReviewUseCase instance.
- */
-export function createReviewUseCase(): ReviewUseCase {
-  return new ReviewUseCase();
-}
-;
-  return new RegExp(expression).test(workspacePath);
+  expression += '$';
+  try {
+    return new RegExp(expression).test(workspacePath);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Derives workspace package names and paths from the same Git snapshot as the review.
- * A missing or invalid workspace manifest disables workspace mapping instead of
+ * A missing or invalid workspace manifest disables workspace mapping rather than
  * silently consulting the live worktree's package.json files.
  */
 async function resolveWorkspaceInfosAtScope(
@@ -506,7 +464,6 @@ async function resolveWorkspaceInfosAtScope(
   const negativePatterns = workspacePatterns
     .filter((pattern) => pattern.trim().startsWith('!'))
     .map((pattern) => pattern.trim().slice(1));
-
   if (positivePatterns.length === 0) return [];
 
   const workspaceDirs = new Set<string>();
@@ -523,16 +480,14 @@ async function resolveWorkspaceInfosAtScope(
 
   const workspaces: WorkspaceInfo[] = [];
   for (const workspaceDir of Array.from(workspaceDirs).sort()) {
-    const packageJson = await readSnapshotJson(`${workspaceDir}/package.json`);
+    const packageJson = await readSnapshotJson(workspaceDir + '/package.json');
     const name = packageJson?.name;
     if (typeof name === 'string' && name.trim()) {
       workspaces.push({ name: name.trim(), path: workspaceDir });
     }
   }
-
   return workspaces;
 }
-
 /**
  * Builds a consistent empty result for scopes with no reviewable files.
  */
