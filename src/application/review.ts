@@ -206,17 +206,21 @@ export class ReviewUseCase {
     let diagnosticsResult: { diagnostics: import('../model/types.js').Diagnostic[] } = {
       diagnostics: [],
     };
+    const pipelineWarnings: string[] = [];
     try {
       if (scope.type === 'working-tree') {
         diagnosticsResult = await collectDiagnostics(parsedFilePaths, repoRoot, languages, signal);
       } else {
-        logger.warn(
-          { scopeType: scope.type },
-          'Skipping filesystem-based diagnostics because the requested Git snapshot may differ from the worktree'
-        );
+        const warning =
+          'Filesystem-based diagnostics were skipped because they cannot safely analyze a historical Git snapshot.';
+        pipelineWarnings.push(warning);
+        logger.warn({ scopeType: scope.type, warning }, 'Skipping filesystem-based diagnostics');
       }
     } catch (error) {
-      logger.warn({ error }, 'Diagnostic collection failed, continuing pipeline');
+      const warning =
+        'Diagnostic collection failed; review continued without filesystem-based diagnostics.';
+      pipelineWarnings.push(warning);
+      logger.warn({ error, warning }, 'Diagnostic collection failed, continuing pipeline');
     }
     const tDiagnostics = Date.now();
     emit(
@@ -286,6 +290,7 @@ export class ReviewUseCase {
     const tEngine = Date.now();
     const totalMs = tEngine - startTime;
 
+    result.metadata.warnings = [...(result.metadata.warnings ?? []), ...pipelineWarnings];
     result.metadata.timings = {
       discoveryMs: tDiscovery - startTime,
       parseMs: tParse - tDiscovery,
