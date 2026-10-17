@@ -1,6 +1,6 @@
 # Octate 🐙
 
-> Current version in `main`: **v1.1.0**. See the [changelog](CHANGELOG.md) and [v1.1.0 release notes](docs/releases/v1.1.0.md). The GitHub release will be published separately.
+> Current version in `main`: **v1.1.0**. See the [changelog](CHANGELOG.md) and [v1.1.0 release notes](docs/releases/v1.1.0.md). The GitHub Release workflow publishes the `v1.1.0` tag and release from these notes after they land on `main`.
 
 <div align="center">
 
