@@ -119,6 +119,7 @@ describe('renderers:tui:renderer', () => {
   it('loads finding source from the configured review snapshot loader', async () => {
     const critFinding = createMockFinding('critical', {
       id: 'snapshot-finding',
+      file: 'src/app.ts',
       compositeScore: 95,
     });
     const loadFileContents = jest.fn(
