@@ -29,7 +29,6 @@ jobs:
       - name: Validate release metadata
         id: release
         env:
-          GH_TOKEN: ${{ github.token }}
           PUSH_BEFORE: ${{ github.event.before }}
         shell: bash
         run: |
@@ -37,7 +36,7 @@ jobs:
 
           mapfile -t release_files < <(
             git diff --name-only "$PUSH_BEFORE" "$GITHUB_SHA" \
-              | grep -E '^docs/releases/v[0-9]+\.[0-9]+\.[0-9]+\.md
+              | grep -E '^docs/releases/v[0-9]+\.[0-9]+\.[0-9]+\.md$' || true
           )
 
           if [ "${#release_files[@]}" -ne 1 ]; then
@@ -72,71 +71,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_file="docs/releases/${RELEASE_TAG}.md"
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::notice::GitHub Release $RELEASE_TAG already exists; release creation is idempotent."
-          else
-            if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-              echo "::error::Tag $RELEASE_TAG exists without a GitHub Release. Refusing to retarget it."
-              exit 1
-            fi
-
-            gh release create "$RELEASE_TAG" \
-              --target "$GITHUB_SHA" \
-              --title "Octate $RELEASE_TAG" \
-              --notes-file "$release_file"
-          fi
-
-      - name: Dispatch npm publication
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run .github/workflows/publish.yml \
-            --ref main \
-            --field "version=$RELEASE_VERSION"
- || true
-          )
-
-          if [ "${#release_files[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one versioned release-notes file in this push; found ${#release_files[@]}."
-            exit 1
-          fi
-
-          release_file="${release_files[0]}"
-          tag="$(basename "$release_file" .md)"
-          version="${tag#v}"
-          package_version="$(node -p "require('./package.json').version")"
-          runtime_version="$(sed -n "s/^export const OCTATE_VERSION = '\\([^']*\\)';$/\\1/p" src/version.ts)"
-
-          if [[ ! "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then
-            echo "::error::Release tag '$tag' is not a valid stable semantic version."
-            exit 1
-          fi
-
-          if [ "$package_version" != "$version" ] || [ "$runtime_version" != "$version" ]; then
-            echo "::error::Release version $version does not match package/runtime versions ($package_version / $runtime_version)."
-            exit 1
-          fi
-
-          test -s CHANGELOG.md
-          test -s "$release_file"
-          grep -Fq "## [$version]" CHANGELOG.md
-
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release and tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_FILE: ${{ steps.release.outputs.release_file }}
         shell: bash
         run: |
           set -euo pipefail
