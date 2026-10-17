@@ -18,6 +18,7 @@ export interface InteractiveTuiOptions extends RendererOptions {
   failOn?: ReviewFailOnSeverity | undefined;
   onReReview?: (() => Promise<void>) | undefined;
   fileContents?: Map<string, string> | undefined;
+  loadFileContents?: ((filePaths: readonly string[]) => Promise<Map<string, string>>) | undefined;
   diffText?: string | undefined;
 }
 
@@ -29,6 +30,7 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
   private exitResolver: (() => void) | null = null;
   private exitPromise: Promise<void> | null = null;
   private finalSuppressedIds: ReadonlySet<string> = new Set();
+  private latestResult: ReviewResult | null = null;
   private started = false;
 
   constructor(options: InteractiveTuiOptions = {}) {
@@ -101,7 +103,50 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
   }
 
   public dispatchResult(result: ReviewResult): void {
+    this.latestResult = result;
     this.actionEmitter.emit('action', { type: 'FINISH_REVIEW', result });
+  }
+
+  /**
+   * Replaces the visible review result and refreshes source context for that result.
+   * Snapshot-aware callers must supply loadFileContents so historical reviews never
+   * display unrelated live-worktree content.
+   */
+  public async updateResult(result: ReviewResult): Promise<void> {
+    const fileContents = this.options.fileContents ?? new Map<string, string>();
+
+    if (!this.options.fileContents) {
+      const uniqueFiles = new Set<string>();
+      for (const finding of result.findings) {
+        if (finding.file) uniqueFiles.add(finding.file);
+        for (const evidence of finding.evidence) {
+          if (evidence.file) uniqueFiles.add(evidence.file);
+        }
+      }
+
+      if (this.options.loadFileContents) {
+        const loaded = await this.options.loadFileContents(Array.from(uniqueFiles));
+        for (const [file, content] of loaded) fileContents.set(file, content);
+      } else {
+        await Promise.all(
+          Array.from(uniqueFiles).map(async (relativeFile) => {
+            try {
+              const fullPath = path.resolve(this.options.repoRoot ?? process.cwd(), relativeFile);
+              const content = await fs.promises.readFile(fullPath, 'utf-8');
+              fileContents.set(relativeFile, content);
+            } catch {
+              // Ignore unreadable or deleted files.
+            }
+          })
+        );
+      }
+    }
+
+    this.actionEmitter.emit('data', {
+      fileContents,
+      diffText: this.options.diffText ?? '',
+    });
+    this.dispatchResult(result);
   }
 
   public async render(result: ReviewResult): Promise<void> {
@@ -110,36 +155,7 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
     }
 
     try {
-      const fileContents = this.options.fileContents ?? new Map<string, string>();
-      if (!this.options.fileContents) {
-        const uniqueFiles = new Set<string>();
-        for (const f of result.findings) {
-          if (f.file) {
-            uniqueFiles.add(f.file);
-          }
-          for (const ev of f.evidence) {
-            if (ev.file) {
-              uniqueFiles.add(ev.file);
-            }
-          }
-        }
-
-        await Promise.all(
-          Array.from(uniqueFiles).map(async (relFile) => {
-            try {
-              const fullPath = path.resolve(this.options.repoRoot ?? process.cwd(), relFile);
-              const content = await fs.promises.readFile(fullPath, 'utf-8');
-              fileContents.set(relFile, content);
-            } catch {
-              // Ignore unreadable or deleted files
-            }
-          })
-        );
-      }
-
-      const diffText = this.options.diffText ?? '';
-      this.actionEmitter.emit('data', { fileContents, diffText });
-      this.dispatchResult(result);
+      await this.updateResult(result);
 
       if (this.exitPromise) {
         await this.exitPromise;
@@ -149,7 +165,8 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
     }
 
     const threshold = this.options.failOn ?? 'critical';
-    const activeFindings = result.findings.filter((f) => !this.finalSuppressedIds.has(f.id));
+    const finalResult = this.latestResult ?? result;
+    const activeFindings = finalResult.findings.filter((f) => !this.finalSuppressedIds.has(f.id));
     const finalBlockingCount = countBlockingFindings(activeFindings, threshold);
     process.exitCode = finalBlockingCount > 0 ? 1 : 0;
 
