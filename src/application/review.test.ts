@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import * as git from 'isomorphic-git';
 import { DefaultConfig } from '../config/schema.js';
 import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
-import { createReviewUseCase, ReviewUseCase } from './review.js';
+import {
+  createReviewUseCase,
+  resolveWorkspaceInfosAtScope,
+  ReviewUseCase,
+} from './review.js';
+import { listFilesAtReviewScope } from '../repository/git.js';
 import type { CanonicalReviewStage, ReviewProgressEvent } from './types.js';
 
 describe('application:review', () => {
@@ -162,6 +167,48 @@ describe('application:review', () => {
     const recordedRequests = JSON.stringify(model.calls);
     expect(recordedRequests).toContain('COMMITTED_VERSION');
     expect(recordedRequests).not.toContain('WORKTREE_VERSION');
+  });
+
+  it('resolves workspace names and layout from the reviewed snapshot', async () => {
+    await fs.mkdir(path.join(testDir, 'packages', 'core'), { recursive: true });
+    await fs.writeFile(
+      path.join(testDir, 'package.json'),
+      JSON.stringify({ name: 'snapshot-root', workspaces: ['packages/*'] }, null, 2)
+    );
+    await fs.writeFile(
+      path.join(testDir, 'packages', 'core', 'package.json'),
+      JSON.stringify({ name: '@snapshot/core' }, null, 2)
+    );
+    await git.add({ fs, dir: testDir, filepath: 'package.json' });
+    await git.add({ fs, dir: testDir, filepath: 'packages/core/package.json' });
+    await git.commit({ fs, dir: testDir, message: 'Add snapshot workspace manifest' });
+    const commitOid = await git.resolveRef({ fs, dir: testDir, ref: 'HEAD' });
+
+    // Change workspace discovery inputs after the commit. A historical review must
+    // keep the committed manifest and package identity.
+    await fs.writeFile(
+      path.join(testDir, 'package.json'),
+      JSON.stringify({ name: 'live-root', workspaces: ['apps/*'] }, null, 2)
+    );
+    await fs.mkdir(path.join(testDir, 'apps', 'live-only'), { recursive: true });
+    await fs.writeFile(
+      path.join(testDir, 'apps', 'live-only', 'package.json'),
+      JSON.stringify({ name: '@live-only/package' }, null, 2)
+    );
+    await fs.writeFile(
+      path.join(testDir, 'packages', 'core', 'package.json'),
+      JSON.stringify({ name: '@live-changed/core' }, null, 2)
+    );
+
+    const snapshotPaths = await listFilesAtReviewScope(testDir, 'commit', commitOid);
+    const workspaces = await resolveWorkspaceInfosAtScope(
+      testDir,
+      'commit',
+      commitOid,
+      snapshotPaths
+    );
+
+    expect(workspaces).toEqual([{ name: '@snapshot/core', path: 'packages/core' }]);
   });
 
   it('forwards project rules and architecture constraints to model requests', async () => {
