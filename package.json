@@ -51,7 +51,7 @@
     "check": "biome check --write .",
     "prepare": "husky install",
     "prepublishOnly": "pnpm run build",
-    "check:release-metadata": "node scripts/check-release-metadata.cjs"
+    "check:release-metadata": "node scripts/check-release-metadata.mjs"
   },
   "dependencies": {
     "@microsoft/sarif": "latest",
