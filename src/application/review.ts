@@ -194,9 +194,9 @@ export class ReviewUseCase {
     if (snapshotTsConfig) {
       try {
         const stripped = snapshotTsConfig
-        .replace(/\/\/.*$/gm, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/,(\s*[}\]])/g, '$1');
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/,(\s*[}\]])/g, '$1');
         const parsed = JSON.parse(stripped) as {
           compilerOptions?: { paths?: unknown; baseUrl?: unknown };
         };
