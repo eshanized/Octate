@@ -47,7 +47,11 @@ if (!readme.includes(expectedReleaseUrl)) {
   fail(`README.md must link to ${expectedReleaseUrl}.`);
 }
 
-if (/Current development version|Release publication follows the passing release workflow/i.test(readme)) {
+if (
+  /Current development version|Release publication follows the passing release workflow/i.test(
+    readme
+  )
+) {
   fail('README.md still contains the stale development-version banner.');
 }
 
