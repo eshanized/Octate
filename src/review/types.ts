@@ -209,6 +209,10 @@ export interface ReviewEngineInput {
   referenceGraph: ReferenceGraph;
   symbolIndex: SymbolIndex;
   diagnostics: Diagnostic[];
+  /** Trusted instructions from project rules and architecture configuration. */
+  projectRules?: string[] | undefined;
+  /** Reads a file from the requested review snapshot, returning null when absent. */
+  readFileAtScope?: ((file: string) => Promise<string | null>) | undefined;
   model: ReviewModel;
   config?:
     | (Partial<ReviewConfig> & Pick<ReviewConfig, 'severity' | 'maxFindings' | 'minConfidence'>)

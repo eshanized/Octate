@@ -38,10 +38,11 @@ export interface IgnoreParseResult {
 export async function parseIgnoreFile(filePath: string): Promise<IgnoreParseResult> {
   try {
     const content = await readFile(filePath, 'utf-8');
-    const lines = content.split('\n');
-    const patterns = lines
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith('#'));
+    const lines = content
+      .split('\n')
+      .map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+    // Preserve meaningful leading and escaped trailing spaces for gitignore syntax.
+    const patterns = lines.filter((line) => line.trim().length > 0 && !line.startsWith('#'));
     return { patterns, filePath };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -106,12 +107,12 @@ export async function loadIgnorePatterns(
   // Always exclude critical directories regardless of config
   const criticalPatterns = [
     '.git/**',
-    'node_modules/**',
-    'vendor/**',
-    'dist/**',
-    'build/**',
-    '*.log',
-    '.DS_Store',
+    '**/node_modules/**',
+    '**/vendor/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/*.log',
+    '**/.DS_Store',
   ];
   matcher.add(criticalPatterns);
 

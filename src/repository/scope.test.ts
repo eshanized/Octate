@@ -220,9 +220,9 @@ describe('resolveScope', () => {
   });
 
   describe('--branch', () => {
-    it('resolves branch scope', async () => {
-      // Create a branch
+    it('resolves branch scope against its default base when the target is HEAD', async () => {
       await git.branch({ fs, dir: testDir, ref: 'feature-branch' });
+      await git.checkout({ fs, dir: testDir, ref: 'feature-branch' });
       await fs.writeFile(path.join(testDir, 'feature.ts'), 'export const f = 1;\n');
       await git.add({ fs, dir: testDir, filepath: 'feature.ts' });
       await git.commit({ fs, dir: testDir, message: 'Feature commit' });
@@ -235,7 +235,28 @@ describe('resolveScope', () => {
 
       expect(scope.type).toBe('branch');
       expect(scope.head).toBe('feature-branch');
-      expect(scope.base).toBeDefined();
+      expect(scope.files).toContainEqual({ path: 'feature.ts', status: 'added' });
+      expect(scope.diff).toContain('+export const f = 1;');
+    });
+
+    it('does not return an empty diff when no base branch can be inferred', async () => {
+      const branchOnlyDir = path.join(testDir, 'branch-only');
+      await fs.mkdir(branchOnlyDir, { recursive: true });
+      await git.init({ fs, dir: branchOnlyDir, defaultBranch: 'feature-only' });
+      await git.setConfig({ fs, dir: branchOnlyDir, path: 'user.name', value: 'Test User' });
+      await git.setConfig({
+        fs,
+        dir: branchOnlyDir,
+        path: 'user.email',
+        value: 'test@example.com',
+      });
+      await fs.writeFile(path.join(branchOnlyDir, 'README.md'), '# Standalone\n');
+      await git.add({ fs, dir: branchOnlyDir, filepath: 'README.md' });
+      await git.commit({ fs, dir: branchOnlyDir, message: 'Initial' });
+
+      await expect(
+        resolveScope({ type: 'branch', repoRoot: branchOnlyDir, branch: 'feature-only' })
+      ).rejects.toThrow('Cannot infer a base branch');
     });
 
     it('throws when branch not provided', async () => {

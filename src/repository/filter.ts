@@ -3,7 +3,8 @@
  * Integrates with IgnoreMatcher for comprehensive file filtering.
  */
 
-import { readFile, stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { lstat, readFile, stat } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve } from 'node:path';
 import type { IgnoreMatcher } from './ignore.js';
 
@@ -69,16 +70,9 @@ export interface FileFilterResult {
 export async function isBinaryFile(filePath: string): Promise<boolean> {
   try {
     const buffer = await readFile(filePath);
-    // Check for null bytes in the buffer (strong indicator of binary)
-    if (buffer.includes(0)) {
-      return true;
-    }
-    // Try to decode as UTF-8
-    const text = buffer.toString('utf-8');
-    // If decoding produces replacement characters, likely binary
-    if (text.includes('\uFFFD')) {
-      return true;
-    }
+    if (buffer.includes(0)) return true;
+    // U+FFFD is valid Unicode; only malformed UTF-8 is binary.
+    new TextDecoder('utf-8', { fatal: true }).decode(buffer);
     return false;
   } catch {
     return true;
@@ -92,38 +86,83 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
 export async function isBinaryFileFast(filePath: string): Promise<boolean> {
   try {
     const buffer = await readFile(filePath);
-    const sample = buffer.subarray(0, BINARY_SAMPLE_SIZE);
+    if (buffer.includes(0)) return true;
 
-    // Check for null bytes (strong indicator of binary)
-    if (sample.includes(0)) {
+    let decoded: string;
+    try {
+      // Validate the whole byte stream so UTF-8 sequences cannot be cut at a sample boundary.
+      decoded = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
       return true;
     }
 
-    // Decode as UTF-8 and check for replacement characters
-    const text = sample.toString('utf-8');
-    if (text.includes('\uFFFD')) {
-      return true;
-    }
+    // Non-ASCII Unicode characters are valid text, not binary markers.
+    const sample = Array.from(decoded).slice(0, BINARY_SAMPLE_SIZE).join('');
+    if (sample.length === 0) return false;
 
-    // Check ratio of non-printable characters in the decoded text
-    // Count control characters (except newline, tab, carriage return)
-    let nonPrintable = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === undefined) continue;
-      const code = char.charCodeAt(0);
-      // Allow: printable (32-126), newline (10), tab (9), carriage return (13)
-      if (code !== 9 && code !== 10 && code !== 13 && (code < 32 || code > 126)) {
-        nonPrintable++;
+    let suspiciousControls = 0;
+    for (const char of sample) {
+      const code = char.codePointAt(0);
+      if (code === undefined) continue;
+      const whitespace = code === 9 || code === 10 || code === 13;
+      if (!whitespace && (code < 32 || (code >= 0x7f && code <= 0x9f))) {
+        suspiciousControls++;
       }
     }
-
-    // If more than 30% non-printable, likely binary
-    return nonPrintable / text.length > 0.3;
+    return suspiciousControls / sample.length > 0.3;
   } catch {
     // If we can't read, assume binary to be safe
     return true;
   }
+}
+
+/**
+ * Determines whether snapshot text should be included in a model review.
+ *
+ * This content-based variant is safe for staged and historical snapshots because
+ * it never reads the current worktree. A null content value is retained for
+ * deleted files; callers should separately exclude explicit binary diff sections.
+ */
+export function shouldReviewSnapshotContent(
+  filePath: string,
+  content: string | null,
+  maxFileSize: number = MAX_FILE_SIZE
+): boolean {
+  const normalizedPath = filePath.toLowerCase();
+  if (
+    GENERATED_EXTENSIONS.some((extension) => normalizedPath.endsWith(extension)) ||
+    MINIFIED_PATTERNS.some((pattern) => pattern.test(normalizedPath))
+  ) {
+    return false;
+  }
+
+  // Deleted files have no content at the target snapshot but their removal must be reviewed.
+  if (content === null) return true;
+  if (Buffer.byteLength(content, 'utf-8') > maxFileSize || content.includes('\0')) return false;
+
+  const sample = Array.from(content).slice(0, BINARY_SAMPLE_SIZE);
+  if (sample.length > 0) {
+    const suspiciousControls = sample.filter((character) => {
+      const code = character.codePointAt(0);
+      return (
+        code !== undefined &&
+        code !== 9 &&
+        code !== 10 &&
+        code !== 13 &&
+        (code < 32 || (code >= 0x7f && code <= 0x9f))
+      );
+    }).length;
+    if (suspiciousControls / sample.length > 0.3) return false;
+  }
+
+  const lines = content.split('\n');
+  if (lines.slice(0, 50).some((line) => GENERATED_PATTERNS.some((pattern) => pattern.test(line)))) {
+    return false;
+  }
+
+  // Avoid sending very long minified lines to the model as source context.
+  if (lines.length < 100 && lines.some((line) => line.length > 500)) return false;
+  return true;
 }
 
 /**
@@ -153,15 +192,10 @@ export async function isGeneratedFile(
   try {
     const content = await readFile(filePath, 'utf-8');
     const lines = content.split('\n');
-
-    // Check first 50 lines for generated file markers
-    const headerLines = lines.slice(0, 50).join('\n');
-
-    // Check for common generated file markers
-    for (const pattern of GENERATED_PATTERNS) {
-      if (pattern.test(headerLines)) {
-        return true;
-      }
+    const headerLines = lines.slice(0, 50);
+    // Markers are anchored, so test each header line separately.
+    for (const line of headerLines) {
+      if (GENERATED_PATTERNS.some((pattern) => pattern.test(line))) return true;
     }
 
     // Check for very long lines (minified code often has extremely long lines)
@@ -186,17 +220,31 @@ export function resolveSymlinkSafely(
   repoRoot: string,
   filePath: string
 ): { resolvedPath: string; isSymlink: boolean } {
-  const absolutePath = isAbsolute(filePath) ? filePath : resolve(repoRoot, filePath);
-  const resolvedPath = resolve(absolutePath);
+  const absoluteRoot = resolve(repoRoot);
+  const absolutePath = isAbsolute(filePath) ? resolve(filePath) : resolve(absoluteRoot, filePath);
+  const lexicalRelative = relative(absoluteRoot, absolutePath);
+  const isOutside = (candidate: string) =>
+    candidate === '..' ||
+    candidate.startsWith('..' + (process.platform === 'win32' ? '\\' : '/')) ||
+    isAbsolute(candidate);
 
-  // Check if resolved path is within repo root
-  const relativePath = relative(repoRoot, resolvedPath);
-  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
-    throw new Error(`Symlink points outside repository root: ${filePath}`);
+  if (isOutside(lexicalRelative)) {
+    throw new Error(`Path is outside repository root: ${filePath}`);
   }
 
-  const isSymlinkResult = absolutePath !== resolvedPath;
-  return { resolvedPath, isSymlink: isSymlinkResult };
+  let resolvedRoot: string;
+  let resolvedPath: string;
+  try {
+    resolvedRoot = realpathSync(absoluteRoot);
+    resolvedPath = realpathSync(absolutePath);
+  } catch (error) {
+    throw new Error(`Unable to safely resolve path: ${filePath}`, { cause: error });
+  }
+
+  if (isOutside(relative(resolvedRoot, resolvedPath))) {
+    throw new Error(`Symlink points outside repository root: ${filePath}`);
+  }
+  return { resolvedPath, isSymlink: absolutePath !== resolvedPath };
 }
 
 /**
@@ -227,7 +275,21 @@ export class FileFilter {
    * Analyzes a file and returns whether it should be analyzed.
    */
   async analyzeFile(repoRoot: string, filePath: string): Promise<FileFilterResult> {
-    const absolutePath = isAbsolute(filePath) ? filePath : resolve(repoRoot, filePath);
+    const absolutePath = isAbsolute(filePath) ? resolve(filePath) : resolve(repoRoot, filePath);
+    let safePath: string;
+    try {
+      safePath = resolveSymlinkSafely(repoRoot, absolutePath).resolvedPath;
+    } catch (error) {
+      return {
+        shouldAnalyze: false,
+        isBinary: false,
+        isGenerated: false,
+        isLarge: false,
+        isIgnored: false,
+        size: 0,
+        reason: error instanceof Error ? error.message : 'Unsafe file path',
+      };
+    }
     const relativePath = relative(repoRoot, absolutePath).split('\\').join('/');
 
     // 1. Check ignore patterns first (fastest)
@@ -236,20 +298,33 @@ export class FileFilter {
     // 2. Get file stats for size check
     let size = 0;
     let isLarge = false;
-    const stats = await stat(absolutePath);
+    let stats: Awaited<ReturnType<typeof stat>>;
+    try {
+      stats = await stat(safePath);
+    } catch {
+      return {
+        shouldAnalyze: false,
+        isBinary: false,
+        isGenerated: false,
+        isLarge: false,
+        isIgnored: false,
+        size: 0,
+        reason: 'File does not exist or cannot be accessed',
+      };
+    }
     size = getSafeFileSize(stats);
     isLarge = size > (this.config.maxFileSize ?? MAX_FILE_SIZE);
 
     // 3. Check binary (only if not ignored and not large)
     let isBinary = false;
     if (!isIgnored && !isLarge) {
-      isBinary = await isBinaryFileFast(absolutePath);
+      isBinary = await isBinaryFileFast(safePath);
     }
 
     // 4. Check generated (only if not ignored, not large, not binary)
     let isGenerated = false;
     if (!isIgnored && !isLarge && !isBinary) {
-      isGenerated = await isGeneratedFile(absolutePath, this.config);
+      isGenerated = await isGeneratedFile(safePath, this.config);
     }
 
     // Determine if should analyze
@@ -322,7 +397,7 @@ export async function createFileFilter(
 export async function isSymlink(filePath: string): Promise<boolean> {
   try {
     const absolutePath = isAbsolute(filePath) ? filePath : resolve(filePath);
-    const stats = await stat(absolutePath);
+    const stats = await lstat(absolutePath);
     return stats.isSymbolicLink();
   } catch {
     return false;

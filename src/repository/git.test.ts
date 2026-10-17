@@ -6,13 +6,16 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as git from 'isomorphic-git';
 import {
+  EMPTY_TREE_BASE,
   getChangedFiles,
   getDiff,
   getLog,
   getParentCommit,
   getStagedDiff,
+  getStagedFiles,
   getStatus,
   getWorkingDiff,
+  getWorkingFiles,
   resolveRef,
 } from './git.js';
 
@@ -216,6 +219,62 @@ describe('Git operations', () => {
       expect(diff).toContain('-# Test Repo');
       expect(diff).toContain('+# Modified');
     });
+
+    it('generates separate hunks for distant edits', async () => {
+      const original =
+        Array.from({ length: 24 }, (_, index) => `line-${index + 1}`).join('\n') + '\n';
+      await fs.writeFile(path.join(testDir, 'multi-hunk.txt'), original);
+      await git.add({ fs, dir: testDir, filepath: 'multi-hunk.txt' });
+      await git.commit({ fs, dir: testDir, message: 'Add multi-hunk fixture' });
+      const base = await resolveRef(testDir, 'HEAD');
+
+      const changed = original.replace('line-2', 'line-two').replace('line-22', 'line-twenty-two');
+      await fs.writeFile(path.join(testDir, 'multi-hunk.txt'), changed);
+      await git.add({ fs, dir: testDir, filepath: 'multi-hunk.txt' });
+      await git.commit({ fs, dir: testDir, message: 'Change distant lines' });
+      const head = await resolveRef(testDir, 'HEAD');
+
+      const diff = await getDiff(testDir, base, head);
+      expect((diff.match(/^@@ /gm) ?? []).length).toBe(2);
+      expect(diff).toContain('-line-2');
+      expect(diff).toContain('+line-two');
+      expect(diff).toContain('-line-22');
+      expect(diff).toContain('+line-twenty-two');
+    });
+
+    it('represents a final-newline-only change correctly', async () => {
+      await fs.writeFile(path.join(testDir, 'README.md'), '# Test Repo');
+      const diff = await getWorkingDiff(testDir);
+      expect(diff).toContain('-# Test Repo');
+      expect(diff).toContain('+# Test Repo');
+      expect(diff).toContain('\\ No newline at end of file');
+    });
+
+    it('compares a root commit with an empty tree', async () => {
+      const commits = await getLog(testDir, { depth: 2 });
+      const rootCommit = commits[commits.length - 1]!.oid;
+      const diff = await getDiff(testDir, EMPTY_TREE_BASE, rootCommit);
+      const changes = await getChangedFiles(testDir, EMPTY_TREE_BASE, rootCommit);
+      expect(diff).toContain('+++ b/README.md');
+      expect(diff).toContain('+# Test Repo');
+      expect(changes).toContainEqual({ path: 'README.md', status: 'added' });
+    });
+
+    it('reports executable-bit changes even when file contents are unchanged', async () => {
+      const filePath = path.join(testDir, 'README.md');
+      const base = await resolveRef(testDir, 'HEAD');
+
+      await fs.chmod(filePath, 0o755);
+      await git.add({ fs, dir: testDir, filepath: 'README.md' });
+      await git.commit({ fs, dir: testDir, message: 'Make README executable' });
+      const head = await resolveRef(testDir, 'HEAD');
+
+      const diff = await getDiff(testDir, base, head);
+      const changes = await getChangedFiles(testDir, base, head);
+      expect(diff).toContain('old mode 100644');
+      expect(diff).toContain('new mode 100755');
+      expect(changes).toContainEqual({ path: 'README.md', status: 'modified' });
+    });
   });
 
   describe('getChangedFiles', () => {
@@ -255,6 +314,33 @@ describe('Git operations', () => {
     it('returns empty string when nothing is staged', async () => {
       const diff = await getStagedDiff(testDir);
       expect(diff.trim()).toBe('');
+    });
+
+    it('uses index bytes even when the worktree has newer edits', async () => {
+      await fs.writeFile(path.join(testDir, 'README.md'), '# Staged Version\n');
+      await git.add({ fs, dir: testDir, filepath: 'README.md' });
+      await fs.writeFile(path.join(testDir, 'README.md'), '# Working Version\n');
+
+      const stagedDiff = await getStagedDiff(testDir);
+      const workingDiff = await getWorkingDiff(testDir);
+      expect(stagedDiff).toContain('+# Staged Version');
+      expect(stagedDiff).not.toContain('Working Version');
+      expect(workingDiff).toContain('-# Staged Version');
+      expect(workingDiff).toContain('+# Working Version');
+      expect(workingDiff).not.toContain('-# Test Repo');
+    });
+
+    it('lists changed files consistently with the index and worktree snapshots', async () => {
+      await fs.writeFile(path.join(testDir, 'staged-add.txt'), 'staged\n');
+      await git.add({ fs, dir: testDir, filepath: 'staged-add.txt' });
+      const stagedFiles = await getStagedFiles(testDir);
+      const workingFilesBefore = await getWorkingFiles(testDir);
+      expect(stagedFiles).toContainEqual({ path: 'staged-add.txt', status: 'added' });
+      expect(workingFilesBefore).not.toContainEqual({ path: 'staged-add.txt', status: 'modified' });
+
+      await fs.writeFile(path.join(testDir, 'staged-add.txt'), 'staged plus worktree\n');
+      const workingFilesAfter = await getWorkingFiles(testDir);
+      expect(workingFilesAfter).toContainEqual({ path: 'staged-add.txt', status: 'modified' });
     });
   });
 

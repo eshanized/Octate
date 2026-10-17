@@ -46,7 +46,7 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
+    "lint": "biome check --max-diagnostics=500 .",
     "format": "biome format --write .",
     "check": "biome check --write .",
     "prepare": "husky install",

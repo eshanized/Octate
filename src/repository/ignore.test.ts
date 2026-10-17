@@ -40,6 +40,15 @@ describe('ignore', () => {
       expect(result.filePath).toBe(gitignorePath);
     });
 
+    it('preserves significant leading and escaped trailing spaces', async () => {
+      const gitignorePath = join(repoRoot, '.gitignore');
+      await writeFile(gitignorePath, [' leading-space', 'name\\ '].join('\n') + '\n');
+
+      const result = await parseIgnoreFile(gitignorePath);
+
+      expect(result.patterns).toEqual([' leading-space', 'name\\ ']);
+    });
+
     it('handles empty file', async () => {
       const gitignorePath = join(repoRoot, '.gitignore');
       await writeFile(gitignorePath, '');

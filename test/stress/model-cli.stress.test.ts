@@ -168,6 +168,7 @@ describe('Phase 8: Model Resilience & Subprocess Stress Tests', () => {
         return new Response(
           JSON.stringify({
             choices: [{ message: { role: 'assistant', content: '<<<THIS IS NOT JSON>>>' } }],
+            // biome-ignore lint/style/useNamingConvention: OpenAI-compatible wire format uses snake_case.
             usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -209,6 +210,7 @@ describe('Phase 8: Model Resilience & Subprocess Stress Tests', () => {
             choices: [
               { message: { role: 'assistant', content: JSON.stringify({ wrongField: 123 }) } },
             ],
+            // biome-ignore lint/style/useNamingConvention: OpenAI-compatible wire format uses snake_case.
             usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }

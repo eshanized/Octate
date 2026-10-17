@@ -144,14 +144,20 @@ describe('Phase 10: Cache, Concurrency, and Lifecycle Stress Tests', () => {
 describe('Phase 12: Seeded Fuzzing & Invariant Testing', () => {
   const rand = createMulberry32(987654321);
 
+  function pick<T>(values: readonly T[]): T {
+    const value = values[Math.floor(rand() * values.length)];
+    if (value === undefined) throw new Error('cannot pick from an empty array');
+    return value;
+  }
+
   describe('Path Traversal & Grounding Fuzzing', () => {
     it('strictly rejects fuzzed malicious path traversal attempts', async () => {
       const traversalPrefixes = ['../', '..\\', '../../', '..\\..\\', '/etc/', '/var/log/', '..'];
       const suffixes = ['passwd', 'shadow', 'secret.env', 'config.json', 'test.ts', '.git/config'];
 
       for (let i = 0; i < 100; i++) {
-        const prefix = traversalPrefixes[Math.floor(rand() * traversalPrefixes.length)]!;
-        const suffix = suffixes[Math.floor(rand() * suffixes.length)]!;
+        const prefix = pick(traversalPrefixes);
+        const suffix = pick(suffixes);
         const candidate = `${prefix}${suffix}`;
 
         const finding: ModelFinding = {
@@ -186,8 +192,8 @@ describe('Phase 12: Seeded Fuzzing & Invariant Testing', () => {
     ];
 
     function generateRandomFinding(id: number): ModelFinding {
-      const severity = severities[Math.floor(rand() * severities.length)]!;
-      const category = categories[Math.floor(rand() * categories.length)]!;
+      const severity = pick(severities);
+      const category = pick(categories);
       const startLine = Math.floor(rand() * 500) + 1;
       const endLine = startLine + Math.floor(rand() * 20);
       const confidence = Math.round(rand() * 100) / 100;
@@ -244,8 +250,11 @@ describe('Phase 12: Seeded Fuzzing & Invariant Testing', () => {
       // Verify non-critical findings are in strictly descending score order
       const nonCritical = ranked.filter((f) => f.severity !== 'critical');
       for (let i = 0; i < nonCritical.length - 1; i++) {
-        const current = nonCritical[i]!;
-        const next = nonCritical[i + 1]!;
+        const current = nonCritical[i];
+        const next = nonCritical[i + 1];
+        if (current === undefined || next === undefined) {
+          throw new Error('expected adjacent non-critical findings');
+        }
         expect(current.compositeScore).toBeGreaterThanOrEqual(next.compositeScore);
       }
 
