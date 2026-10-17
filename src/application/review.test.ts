@@ -7,13 +7,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import * as git from 'isomorphic-git';
 import { DefaultConfig } from '../config/schema.js';
-import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
-import {
-  createReviewUseCase,
-  resolveWorkspaceInfosAtScope,
-  ReviewUseCase,
-} from './review.js';
 import { listFilesAtReviewScope } from '../repository/git.js';
+import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
+import { createReviewUseCase, resolveWorkspaceInfosAtScope, ReviewUseCase } from './review.js';
 import type { CanonicalReviewStage, ReviewProgressEvent } from './types.js';
 
 describe('application:review', () => {
