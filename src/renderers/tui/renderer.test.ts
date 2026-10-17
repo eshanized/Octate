@@ -144,6 +144,20 @@ describe('renderers:tui:renderer', () => {
     await renderPromise;
   });
 
+  it('prints analysis warnings after restoring the terminal', async () => {
+    const result = createMockReviewResult([]);
+    result.metadata.warnings = ['Static diagnostics were skipped for this historical review.'];
+    const renderer = new InteractiveTuiRenderer({ stream: mockStream, failOn: 'high' });
+
+    renderer.start();
+    const renderPromise = renderer.render(result);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    renderer.exit();
+    await renderPromise;
+
+    expect(mockStderr.join('')).toContain('Octate warning: Static diagnostics were skipped');
+  });
+
   it('calculates the final exit code from the latest re-review result', async () => {
     const initialResult = createMockReviewResult([]);
     const criticalFinding = createMockFinding('critical', {
