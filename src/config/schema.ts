@@ -5,28 +5,34 @@ import { z } from 'zod';
  * Validates all required sections per CONTEXT.md D-07.
  */
 
-export const ReviewConfigSchema = z.object({
-  severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
-  failOnSeverity: z
-    .enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off'])
-    .default('critical'),
-  maxFindings: z.number().int().positive().max(100).default(50),
-  minConfidence: z.number().min(0).max(1).default(0.6),
-});
+export const ReviewConfigSchema = z
+  .object({
+    severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
+    failOnSeverity: z
+      .enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off'])
+      .default('critical'),
+    maxFindings: z.number().int().positive().max(100).default(50),
+    minConfidence: z.number().min(0).max(1).default(0.6),
+  })
+  .strict();
 
 export const ArchitectureConfigSchema = z
   .union([
-    z.object({
-      boundaries: z.array(z.string()).default([]),
-      forbiddenDependencies: z.array(z.string()).default([]),
-    }),
+    z
+      .object({
+        boundaries: z.array(z.string()).default([]),
+        forbiddenDependencies: z.array(z.string()).default([]),
+      })
+      .strict(),
     z.null(),
   ])
   .transform((val) => (val === null ? { boundaries: [], forbiddenDependencies: [] } : val));
 
-export const ProjectConfigSchema = z.object({
-  name: z.string().min(1),
-});
+export const ProjectConfigSchema = z
+  .object({
+    name: z.string().min(1),
+  })
+  .strict();
 
 export const OctateConfigSchema = z
   .object({
@@ -43,6 +49,58 @@ export const OctateConfigSchema = z
     ignore: z.array(z.string()).default([]),
   })
   .strict();
+
+/**
+ * Schema for explicit configuration layers.
+ *
+ * Unlike OctateConfigSchema, this schema does not materialize defaults. It is
+ * used before precedence merging so omitted global/project values cannot
+ * overwrite lower-precedence values.
+ */
+export const PartialOctateConfigSchema = z
+  .object({
+    version: z
+      .string()
+      .regex(/^\d+\.\d+\.\d+$/)
+      .optional(),
+    project: z
+      .object({ name: z.string().min(1).optional() })
+      .strict()
+      .optional(),
+    review: z
+      .object({
+        severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
+        failOnSeverity: z
+          .enum(['critical', 'high', 'medium', 'low', 'info', 'none', 'off'])
+          .optional(),
+        maxFindings: z.number().int().positive().max(100).optional(),
+        minConfidence: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+    rules: z.array(z.string()).optional(),
+    architecture: z
+      .union([
+        z
+          .object({
+            boundaries: z.array(z.string()).optional(),
+            forbiddenDependencies: z.array(z.string()).optional(),
+          })
+          .strict(),
+        z.null(),
+      ])
+      .optional(),
+    ignore: z.array(z.string()).optional(),
+  })
+  .strict();
+
+/** A project file must carry the required project identity and config version. */
+export const ProjectConfigLayerSchema = PartialOctateConfigSchema.extend({
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  project: ProjectConfigSchema,
+}).strict();
+
+export type PartialOctateConfig = z.infer<typeof PartialOctateConfigSchema>;
 
 export type OctateConfig = z.infer<typeof OctateConfigSchema>;
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>;

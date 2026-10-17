@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
-import { loadGlobalConfig, loadProjectConfig } from './loader.js';
-import { DefaultConfig, type OctateConfig, OctateConfigSchema } from './schema.js';
+import { loadGlobalConfigLayer, loadProjectConfigLayer } from './loader.js';
+import {
+  DefaultConfig,
+  type OctateConfig,
+  OctateConfigSchema,
+  type PartialOctateConfig,
+} from './schema.js';
 
 const logger = createLogger('config:merger');
 
@@ -28,24 +33,37 @@ export function parseEnvConfig(): Partial<OctateConfig> {
 
     const withoutPrefix = key.slice(prefix.length);
     const firstUnderscore = withoutPrefix.indexOf('_');
-    if (firstUnderscore === -1) continue; // No section
-
-    const section = withoutPrefix.slice(0, firstUnderscore).toLowerCase();
+    const section =
+      firstUnderscore === -1
+        ? withoutPrefix.toLowerCase()
+        : withoutPrefix.slice(0, firstUnderscore).toLowerCase();
     if (!KnownSections.has(section)) continue;
+
+    // Top-level array settings (rules/ignore) have no nested key.
+    if (firstUnderscore === -1) {
+      if (section !== 'rules' && section !== 'ignore') continue;
+      try {
+        result[section] = JSON.parse(value);
+      } catch {
+        result[section] = value
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+      continue;
+    }
+
     const keyPart = withoutPrefix.slice(firstUnderscore + 1);
     const camelKey = toCamelCase(keyPart.toLowerCase());
-
-    if (!(section in result)) {
-      result[section] = {};
-    }
+    if (!(section in result)) result[section] = {};
     const sectionObj = result[section] as Record<string, unknown>;
 
-    // Try to parse as JSON, fallback to string
+    // Try to parse as JSON, fallback to string.
     let parsed: unknown = value;
     try {
       parsed = JSON.parse(value);
     } catch {
-      // Keep as string
+      // Keep as string.
     }
     sectionObj[camelKey] = parsed;
   }
@@ -64,8 +82,8 @@ export type DeepPartial<T> = {
  */
 export function mergeConfigs(
   defaults: OctateConfig,
-  global: OctateConfig,
-  project: OctateConfig,
+  global: PartialOctateConfig,
+  project: PartialOctateConfig,
   env: DeepPartial<OctateConfig>,
   cli: DeepPartial<OctateConfig>
 ): OctateConfig {
@@ -101,7 +119,7 @@ export function mergeConfigs(
             result[key] as Record<string, unknown>,
             value as Record<string, unknown>
           );
-        } else if (value !== undefined && value !== null) {
+        } else if (value !== undefined) {
           (result as Record<string, unknown>)[key] = value;
         }
       }
@@ -136,8 +154,8 @@ export function mergeConfigs(
  */
 export interface ConfigMergerOptions {
   configPath?: string | undefined;
-  projectConfig?: OctateConfig;
-  globalConfig?: OctateConfig;
+  projectConfig?: PartialOctateConfig;
+  globalConfig?: PartialOctateConfig;
   envConfig?: DeepPartial<OctateConfig>;
   cliConfig?: DeepPartial<OctateConfig>;
 }
@@ -145,8 +163,8 @@ export interface ConfigMergerOptions {
 export async function loadConfig(options: ConfigMergerOptions = {}): Promise<OctateConfig> {
   const {
     configPath,
-    projectConfig = await loadProjectConfig(configPath),
-    globalConfig = await loadGlobalConfig(),
+    projectConfig = await loadProjectConfigLayer(configPath),
+    globalConfig = await loadGlobalConfigLayer(),
     envConfig = parseEnvConfig(),
     cliConfig = {},
   } = options;

@@ -130,6 +130,24 @@ describe('OctateConfigSchema', () => {
       };
       expect(() => OctateConfigSchema.parse(config)).toThrow();
     });
+
+    it('rejects unsupported nested review keys', () => {
+      const config = {
+        version: '1.0.0',
+        project: { name: 'test' },
+        review: { severity: 'high', confidenceThreshold: 0.9 },
+      };
+      expect(() => OctateConfigSchema.parse(config)).toThrow();
+    });
+
+    it('rejects unsupported nested architecture keys', () => {
+      const config = {
+        version: '1.0.0',
+        project: { name: 'test' },
+        architecture: { boundaries: [], forbidden_dependencies: ['lodash'] },
+      };
+      expect(() => OctateConfigSchema.parse(config)).toThrow();
+    });
   });
 
   describe('DefaultConfig', () => {

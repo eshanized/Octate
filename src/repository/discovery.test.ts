@@ -45,15 +45,27 @@ describe('findGitRoot', () => {
     }
   });
 
-  it('handles worktree .git file', async () => {
-    // Create a worktree scenario
+  it('handles a worktree .git pointer file and returns the worktree root', async () => {
     const worktreeDir = path.join(testDir, 'worktree');
+    const worktreeGitDir = path.join(testDir, '.git', 'worktrees', 'worktree-1');
     await fs.mkdir(worktreeDir, { recursive: true });
-    await fs.writeFile(path.join(worktreeDir, '.git'), `gitdir: ${path.join(testDir, '.git')}\n`);
-    await fs.writeFile(path.join(testDir, '.git', 'HEAD'), 'ref: refs/heads/main');
+    await fs.mkdir(worktreeGitDir, { recursive: true });
+    await fs.writeFile(path.join(worktreeGitDir, 'HEAD'), 'ref: refs/heads/feature');
+    const gitDirPointer = path.relative(worktreeDir, worktreeGitDir);
+    await fs.writeFile(path.join(worktreeDir, '.git'), `gitdir: ${gitDirPointer}\n`);
 
     const result = await findGitRoot(worktreeDir);
-    expect(result).toBe(testDir);
+    expect(result).toBe(worktreeDir);
+  });
+  it('handles an absolute worktree gitdir pointer', async () => {
+    const worktreeDir = path.join(testDir, 'absolute-worktree');
+    const worktreeGitDir = path.join(testDir, '.git', 'worktrees', 'absolute-worktree');
+    await fs.mkdir(worktreeDir, { recursive: true });
+    await fs.mkdir(worktreeGitDir, { recursive: true });
+    await fs.writeFile(path.join(worktreeGitDir, 'HEAD'), 'ref: refs/heads/absolute-feature');
+    await fs.writeFile(path.join(worktreeDir, '.git'), `gitdir: ${worktreeGitDir}\n`);
+
+    expect(await findGitRoot(worktreeDir)).toBe(worktreeDir);
   });
 });
 

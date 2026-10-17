@@ -196,15 +196,12 @@ export async function runReview(
     logger.info({ repoRoot, refs, options }, 'Starting review');
 
     // Load configuration
+    // Only an explicitly supplied CLI policy flag overrides configuration.
+    // Quiet mode affects rendering, not which findings qualify for review.
     const config = await loadConfig({
       configPath: options.config,
       cliConfig: {
-        review: {
-          severity: options.quiet ? 'info' : 'medium',
-          failOnSeverity: options.failOn ?? 'critical',
-          maxFindings: 50,
-          minConfidence: 0.6,
-        },
+        ...(options.failOn !== undefined ? { review: { failOnSeverity: options.failOn } } : {}),
       },
     });
 

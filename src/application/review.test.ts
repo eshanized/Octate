@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import * as git from 'isomorphic-git';
+import { DefaultConfig } from '../config/schema.js';
 import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
 import { createReviewUseCase, ReviewUseCase } from './review.js';
 import type { CanonicalReviewStage, ReviewProgressEvent } from './types.js';
@@ -137,6 +138,57 @@ describe('application:review', () => {
       expect(startEvent?.step).toEqual({ current: i + 1, total: 8 });
       expect(completeEvent?.step).toEqual({ current: i + 1, total: 8 });
     }
+  });
+
+  it('uses the requested commit snapshot instead of newer worktree contents', async () => {
+    const filePath = path.join(testDir, 'snapshot.ts');
+    await fs.writeFile(filePath, 'export const snapshotValue = "COMMITTED_VERSION";\n');
+    await git.add({ fs, dir: testDir, filepath: 'snapshot.ts' });
+    await git.commit({ fs, dir: testDir, message: 'Commit snapshot fixture' });
+    const commitOid = await git.resolveRef({ fs, dir: testDir, ref: 'HEAD' });
+
+    await fs.writeFile(filePath, 'export const snapshotValue = "WORKTREE_VERSION";\n');
+
+    await useCase.execute({
+      repoRoot: testDir,
+      modelOverride: model,
+      scopeOptions: { type: 'commit', repoRoot: testDir, commit: commitOid },
+    });
+
+    const recordedRequests = JSON.stringify(model.calls);
+    expect(recordedRequests).toContain('COMMITTED_VERSION');
+    expect(recordedRequests).not.toContain('WORKTREE_VERSION');
+  });
+
+  it('forwards project rules and architecture constraints to model requests', async () => {
+    await fs.writeFile(
+      path.join(testDir, 'handler.ts'),
+      'export function handle(input: string): string { return input.trim(); }\n'
+    );
+
+    const config = {
+      ...DefaultConfig,
+      project: { name: 'review-rules-test' },
+      rules: ['validate input before use'],
+      architecture: {
+        boundaries: ['src/domain'],
+        forbiddenDependencies: ['src/domain -> src/infrastructure'],
+      },
+    };
+
+    const result = await useCase.execute({
+      repoRoot: testDir,
+      modelOverride: model,
+      config,
+    });
+
+    expect(result).toBeDefined();
+    expect(model.calls.length).toBeGreaterThan(0);
+    expect(model.calls[0]?.projectRules).toEqual([
+      'Project rule: validate input before use',
+      'Architecture boundaries to preserve: src/domain',
+      'Forbidden dependencies and dependency directions: src/domain -> src/infrastructure',
+    ]);
   });
 
   it('rejects when AbortSignal is already aborted', async () => {

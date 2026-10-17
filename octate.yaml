@@ -13,7 +13,7 @@ review:
   # Minimum severity to report: critical, high, medium, low, info
   severity: "medium"
   # Maximum number of findings to report (1-100)
-  max_findings: 50
+  maxFindings: 50
   # Enable/disable specific reviewer types (all enabled by default)
   # reviewers:
   #   structural: true

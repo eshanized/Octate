@@ -4,7 +4,6 @@
  * emitting the 8 canonical progress events and enforcing cancellation checks.
  */
 
-import { readFile } from 'node:fs/promises';
 import { collectDiagnostics } from '../analysis/diagnostics/index.js';
 import { parseFiles } from '../analysis/parser/index.js';
 import { extractSymbols } from '../analysis/symbols/index.js';
@@ -19,9 +18,12 @@ import {
 import { createLogger } from '../logging/index.js';
 import { LocalNvidiaProvider } from '../model/index.js';
 import { findGitRoot } from '../repository/discovery.js';
+import { createFileFilter, shouldReviewSnapshotContent } from '../repository/filter.js';
+import { filterDiffToFiles, readFileAtReviewScope } from '../repository/git.js';
 import { resolveScope, type ScopeOptions } from '../repository/scope.js';
 import { createReviewEngine } from '../review/engine.js';
 import type { ReviewResult } from '../review/types.js';
+import type { ReviewScope } from '../types/index.js';
 import { OCTATE_VERSION } from '../version.js';
 import type { CanonicalReviewStage, ReviewProgressStatus, ReviewUseCaseOptions } from './types.js';
 
@@ -76,64 +78,70 @@ export class ReviewUseCase {
 
     // Short-circuit on empty scope
     if (scope.files.length === 0) {
-      const durationMs = Date.now() - startTime;
       const modelName =
         (options.modelOverride as { modelName?: string } | undefined)?.modelName ??
         (options.modelOverride as { modelId?: string } | undefined)?.modelId ??
         'none';
-
-      return {
-        summary: {
-          totalFindings: 0,
-          bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
-          byCategory: {
-            correctness: 0,
-            security: 0,
-            performance: 0,
-            architecture: 0,
-            reliability: 0,
-            maintainability: 0,
-            compatibility: 0,
-            testing: 0,
-          },
-          byReviewer: {},
-          filesAnalyzed: 0,
-          durationMs,
-        },
-        findings: [],
-        metadata: {
-          scopeType: scope.type,
-          base: scope.base,
-          head: scope.head,
-          timestamp: new Date().toISOString(),
-          version: OCTATE_VERSION,
-          model: modelName,
-          totalTokens: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          warnings: [],
-          reviewersTriggered: [],
-          criticInvoked: false,
-          preCriticFindingCount: 0,
-          postCriticFindingCount: 0,
-        },
-      };
+      return createEmptyReviewResult(scope, modelName, Date.now() - startTime);
     }
 
-    const filePaths = scope.files.map((f) => f.path);
     const config = options.config ?? (await loadConfig({}));
+    const projectRules = [
+      ...config.rules.map((rule) => `Project rule: ${rule}`),
+      ...(config.architecture.boundaries.length > 0
+        ? [`Architecture boundaries to preserve: ${config.architecture.boundaries.join(', ')}`]
+        : []),
+      ...(config.architecture.forbiddenDependencies.length > 0
+        ? [
+            `Forbidden dependencies and dependency directions: ${config.architecture.forbiddenDependencies.join(', ')}`,
+          ]
+        : []),
+    ];
+    const fileFilter = await createFileFilter(repoRoot, {
+      additionalIgnorePatterns: config.ignore,
+    });
+    const shouldIncludeFile = fileFilter.createFilter();
+    const binaryPaths = new Set(
+      [
+        ...scope.diff.matchAll(
+          /^# Binary(?: file| or unresolved index entry) (.+) (?:differs|added|deleted)$/gm
+        ),
+      ]
+        .map((match) => match[1])
+        .filter((filePath): filePath is string => filePath !== undefined)
+    );
+    const candidates = scope.files
+      .map((file) => file.path)
+      .filter((filePath) => shouldIncludeFile(filePath) && !binaryPaths.has(filePath));
 
-    // Read file contents for subsequent analysis and intelligence stages
-    const fileContents = new Map<string, string>();
+    // Read each changed file from its requested Git snapshot before applying
+    // content-based filters; never consult the worktree for staged/commit reviews.
+    const snapshotContents = new Map<string, string | null>();
     await Promise.all(
-      filePaths.map(async (file) => {
-        try {
-          const content = await readFile(`${repoRoot}/${file}`, 'utf-8');
-          fileContents.set(file, content);
-        } catch {
-          fileContents.set(file, '');
-        }
+      candidates.map(async (file) => {
+        snapshotContents.set(
+          file,
+          await readFileAtReviewScope(repoRoot, scope.type, scope.head, file)
+        );
       })
+    );
+
+    const filePaths = candidates.filter((filePath) =>
+      shouldReviewSnapshotContent(filePath, snapshotContents.get(filePath) ?? null)
+    );
+    const reviewDiff = filterDiffToFiles(scope.diff, filePaths);
+
+    // Ignore rules or content filters can remove every file from an otherwise valid Git scope.
+    if (filePaths.length === 0 || !reviewDiff.trim()) {
+      const modelName =
+        (options.modelOverride as { modelName?: string } | undefined)?.modelName ??
+        (options.modelOverride as { modelId?: string } | undefined)?.modelId ??
+        'none';
+      return createEmptyReviewResult(scope, modelName, Date.now() - startTime);
+    }
+
+    const fileContents = new Map<string, string>(
+      filePaths.map((file) => [file, snapshotContents.get(file) ?? ''])
     );
 
     const validFiles = filePaths.map((p) => ({
@@ -186,7 +194,14 @@ export class ReviewUseCase {
       diagnostics: [],
     };
     try {
-      diagnosticsResult = await collectDiagnostics(parsedFilePaths, repoRoot, languages, signal);
+      if (scope.type === 'working-tree') {
+        diagnosticsResult = await collectDiagnostics(parsedFilePaths, repoRoot, languages, signal);
+      } else {
+        logger.warn(
+          { scopeType: scope.type },
+          'Skipping filesystem-based diagnostics because the requested Git snapshot may differ from the worktree'
+        );
+      }
     } catch (error) {
       logger.warn({ error }, 'Diagnostic collection failed, continuing pipeline');
     }
@@ -205,11 +220,14 @@ export class ReviewUseCase {
     const contextEngine = createContextEngine();
     const reviewContext = await contextEngine.buildContext({
       changedFiles: filePaths,
-      diff: scope.diff,
+      diff: reviewDiff,
       symbolIndex,
       referenceGraph,
       diagnostics: diagnosticsResult.diagnostics,
-      readFile: async (file: string) => fileContents.get(file) ?? '',
+      readFile: async (file: string) => {
+        if (fileContents.has(file)) return fileContents.get(file) ?? '';
+        return (await readFileAtReviewScope(repoRoot, scope.type, scope.head, file)) ?? '';
+      },
     });
     const tContext = Date.now();
     emit(
@@ -229,14 +247,19 @@ export class ReviewUseCase {
 
     const result = await engine.run({
       repoRoot,
-      diff: scope.diff,
+      diff: reviewDiff,
       changedFiles: filePaths,
       reviewContext,
       referenceGraph,
       symbolIndex,
       diagnostics: diagnosticsResult.diagnostics,
       model,
+      projectRules,
       config: config.review,
+      readFileAtScope: async (file) => {
+        if (fileContents.has(file)) return fileContents.get(file) ?? '';
+        return readFileAtReviewScope(repoRoot, scope.type, scope.head, file);
+      },
       signal,
       onProgress: options.onProgress
         ? (e) => options.onProgress?.(e as unknown as import('./types.js').ReviewProgressEvent)
@@ -263,6 +286,52 @@ export class ReviewUseCase {
 
     return result;
   }
+}
+
+/**
+ * Builds a consistent empty result for scopes with no reviewable files.
+ */
+function createEmptyReviewResult(
+  scope: ReviewScope,
+  modelName: string,
+  durationMs: number
+): ReviewResult {
+  return {
+    summary: {
+      totalFindings: 0,
+      bySeverity: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      byCategory: {
+        correctness: 0,
+        security: 0,
+        performance: 0,
+        architecture: 0,
+        reliability: 0,
+        maintainability: 0,
+        compatibility: 0,
+        testing: 0,
+      },
+      byReviewer: {},
+      filesAnalyzed: 0,
+      durationMs,
+    },
+    findings: [],
+    metadata: {
+      scopeType: scope.type,
+      base: scope.base,
+      head: scope.head,
+      timestamp: new Date().toISOString(),
+      version: OCTATE_VERSION,
+      model: modelName,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      warnings: [],
+      reviewersTriggered: [],
+      criticInvoked: false,
+      preCriticFindingCount: 0,
+      postCriticFindingCount: 0,
+    },
+  };
 }
 
 /**

@@ -19,7 +19,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
 import { runEvaluationHarness } from '../test/evaluation/harness.js';
-import type { EvaluationResult, EvaluationScorecard } from '../test/evaluation/types.js';
+import type { EvaluationScorecard } from '../test/evaluation/types.js';
 
 // Load .env automatically
 try {
@@ -164,7 +164,7 @@ async function main() {
     console.log(pc.dim('─'.repeat(80)));
   }
 
-  console.log('\n' + pc.bold('Evaluation Summary Scorecard:'));
+  console.log(`\n${pc.bold('Evaluation Summary Scorecard:')}`);
   if (scorecard.mode === 'harness_mock') {
     console.log(
       `  • Evaluation Mode         : ${pc.bold(pc.bgRed(pc.white(' HARNESS INTEGRITY ONLY — NOT AI QUALITY EVIDENCE ')))}`

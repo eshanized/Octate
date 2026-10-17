@@ -20,31 +20,36 @@ const logger = createLogger('repository:discovery');
  */
 export async function findGitRoot(startDir: string = process.cwd()): Promise<string | null> {
   let currentDir = path.resolve(startDir);
-
-  // Prevent infinite loops
   const visited = new Set<string>();
+  const rootDir = path.parse(currentDir).root;
 
-  while (currentDir !== path.parse(currentDir).root && !visited.has(currentDir)) {
+  while (!visited.has(currentDir)) {
     visited.add(currentDir);
+    const gitEntry = path.join(currentDir, '.git');
 
-    const gitDir = path.join(currentDir, '.git');
     try {
-      const stat = await fs.stat(gitDir);
-      if (stat.isDirectory() || stat.isFile()) {
-        // Verify it's a valid git directory by checking for HEAD
-        const headPath = path.join(gitDir, 'HEAD');
-        try {
-          await fs.access(headPath);
-          logger.debug({ gitRoot: currentDir }, 'Found Git repository root');
+      const gitStat = await fs.stat(gitEntry);
+      if (gitStat.isDirectory()) {
+        await fs.access(path.join(gitEntry, 'HEAD'));
+        logger.debug({ gitRoot: currentDir }, 'Found Git repository root');
+        return currentDir;
+      }
+
+      if (gitStat.isFile()) {
+        const pointer = (await fs.readFile(gitEntry, 'utf-8')).trim();
+        const match = /^gitdir:\s*(.+)$/i.exec(pointer);
+        if (match?.[1]) {
+          const resolvedGitDir = path.resolve(currentDir, match[1]);
+          await fs.access(path.join(resolvedGitDir, 'HEAD'));
+          logger.debug({ gitRoot: currentDir, gitDir: resolvedGitDir }, 'Found Git worktree root');
           return currentDir;
-        } catch {
-          // HEAD doesn't exist, continue searching
         }
       }
     } catch {
-      // .git doesn't exist, continue searching
+      // Continue searching when .git is absent, malformed, or inaccessible.
     }
 
+    if (currentDir === rootDir) break;
     currentDir = path.dirname(currentDir);
   }
 

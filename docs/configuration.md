@@ -1,118 +1,87 @@
-# Octate Configuration Reference
+# Octate configuration reference
 
-Octate is configured via a YAML file named `octate.yaml` placed at your repository root or discovered in parent directories.
+Octate reads `octate.yaml` from the repository root or the nearest parent directory. Global overrides are read from `$XDG_CONFIG_HOME/octate/config.yaml`, or `~/.config/octate/config.yaml` when `XDG_CONFIG_HOME` is not set.
 
----
+Configuration uses this precedence, from lowest to highest:
 
-## Configuration Hierarchy & Precedence
-
-Octate resolves configuration values through a deterministic 5-tier merge cascade:
-
-```
-Default Config < Global (~/.config/octate/config.yaml) < Project (octate.yaml) < Environment Variables < CLI Flags
+```text
+built-in defaults < global config < project octate.yaml < OCTATE_* environment variables < explicitly supplied CLI options
 ```
 
-Higher tiers unconditionally override lower tiers. For example, passing `--fail-on high` on the CLI overrides any `failOn` setting in `octate.yaml`.
+A layer only overrides fields that it declares. In particular, global configuration files may contain only the settings you want to customize. The `--quiet` flag changes output formatting; it does not change the configured minimum finding severity.
 
----
-
-## Complete `octate.yaml` Example
+## Supported configuration
 
 ```yaml
-version: "1.0"
+version: "1.0.0"
 
 project:
-  name: "MyApplication"
-  description: "Production web backend and API service"
-  languages:
-    - typescript
-    - python
+  name: "my-application"
 
 review:
-  severity: medium             # Minimum severity to report: critical, high, medium, low, info
-  failOn: critical             # Severity that triggers non-zero exit code: critical, high, medium, low, none
-  maxFindings: 25              # Maximum findings returned per review session
-  confidenceThreshold: 0.65    # Findings below this confidence floor are rejected
-  categories:
-    - security
-    - correctness
-    - reliability
-    - architecture
-    - performance
+  severity: "medium"
+  failOnSeverity: "critical"
+  maxFindings: 50
+  minConfidence: 0.6
+
+rules:
+  - "no-hardcoded-secrets"
+  - "require-error-handling"
 
 architecture:
   boundaries:
-    - name: "Domain Isolation"
-      description: "Core domain logic must not import from UI or HTTP transport layers"
-      source: "src/domain/**"
-      forbidden:
-        - "src/ui/**"
-        - "src/controllers/**"
-        - "express"
-        - "koa"
-
-    - name: "Database Abstraction"
-      description: "Direct SQL queries are only permitted within src/db/**"
-      source: "src/**"
-      except:
-        - "src/db/**"
-      forbiddenPatterns:
-        - "SELECT "
-        - "INSERT INTO"
-        - "DELETE FROM"
-
-rules:
-  - id: "RULE-01"
-    name: "No Raw SQL in Controllers"
-    severity: "critical"
-    category: "security"
-    description: "Database queries must use repository interfaces, never inline string queries."
-
-  - id: "RULE-02"
-    name: "Explicit Stream Resource Teardown"
-    severity: "high"
-    category: "reliability"
-    description: "All Node.js Readable and Writable streams must register error and close listeners."
+    - "src/domain"
+    - "src/api"
+  forbiddenDependencies:
+    - "src/domain -> src/infrastructure"
+    - "lodash"
 
 ignore:
-  - "**/*.min.js"
-  - "**/*.bundle.js"
   - "dist/**"
-  - "coverage/**"
-  - "node_modules/**"
   - "**/*.generated.ts"
   - "vendor/**"
-
-cache:
-  enabled: true
-  ttlHours: 168                # Cache invalidation window (7 days)
-  maxSizeBytes: 209715200      # Cache store ceiling (200 MB)
 ```
 
----
+## Fields
 
-## Field Specifications
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `version` | semantic-version string | `1.0.0` | Configuration format version; use `x.y.z` such as `1.0.0`. |
+| `project.name` | non-empty string | `unnamed-project` | Human-readable project name. Required in `octate.yaml`. |
+| `review.severity` | `critical`, `high`, `medium`, `low`, `info` | `medium` | Minimum severity included in final findings. |
+| `review.failOnSeverity` | severity, `none`, or `off` | `critical` | Finding threshold that produces a failing exit code. |
+| `review.maxFindings` | integer from 1 to 100 | `50` | Maximum final findings returned. |
+| `review.minConfidence` | number from 0 to 1 | `0.6` | Minimum confidence threshold used by the critic/decision gate. |
+| `rules` | string array | `[]` | Rule names/instructions to provide to the review pipeline. |
+| `architecture.boundaries` | string array | `[]` | Declared module/path boundaries. |
+| `architecture.forbiddenDependencies` | string array | `[]` | Forbidden dependency names or patterns. |
+| `ignore` | string array | `[]` | Additional ignore patterns; repository ignore files are loaded as well. |
 
-### `version`
-- **Type:** `string` (required)
-- **Allowed values:** `"1.0"`
+The current schema accepts `architecture.boundaries` and `architecture.forbiddenDependencies` as string arrays, not structured objects. It accepts `rules` as strings, not objects. Runtime/cache keys and other settings not shown above are not part of the current `octate.yaml` schema and will be rejected by strict validation.
 
-### `project`
-- `name`: Human-readable identifier for your repository.
-- `description`: Contextual summary provided to the model during review reasoning.
-- `languages`: Array of primary languages enabled for parsing (`typescript`, `javascript`, `python`).
+## Environment variables
 
-### `review`
-- `severity`: Minimum severity filter applied to final ranked findings.
-- `failOn`: Threshold for non-zero exit code (exit code 1) in automated pipelines.
-- `maxFindings`: Upper bound for findings displayed in the TUI or written to SARIF.
-- `confidenceThreshold`: Grounding threshold (0.0 to 1.0). Findings with confidence below this score are discarded by the Critic.
+Environment variables follow `OCTATE_<SECTION>_<KEY>`. Nested keys use underscores and are converted to camel case:
 
-### `architecture.boundaries`
-Enforces dependency invariants deterministically without relying on LLM interpretations:
-- `source`: Glob pattern matching files subject to the boundary.
-- `forbidden`: Module names or globs that files in `source` are forbidden to import.
-- `forbiddenPatterns`: Substring or regex patterns forbidden inside matching files.
+```sh
+OCTATE_PROJECT_NAME=my-application
+OCTATE_REVIEW_SEVERITY=high
+OCTATE_REVIEW_MAX_FINDINGS=25
+OCTATE_REVIEW_FAIL_ON_SEVERITY=high
+OCTATE_REVIEW_MIN_CONFIDENCE=0.75
+OCTATE_ARCHITECTURE_BOUNDARIES='["src/core","src/api"]'
+OCTATE_RULES='["no-console-log","no-hardcoded-secrets"]'
+OCTATE_IGNORE='["dist/**","*.generated.ts"]'
+```
 
-### `ignore`
-Array of glob patterns ignored during repository diff analysis and symbol indexing. Standard `.gitignore` rules are automatically respected in addition to these patterns.
+JSON values are parsed when possible. Top-level `OCTATE_RULES` and `OCTATE_IGNORE` accept JSON arrays or comma-separated values.
+
+## Command-line overrides
+
+Only explicitly supplied policy flags override the configuration. For example:
+
+```sh
+octate review --fail-on high
+```
+
+The flag overrides `review.failOnSeverity` for that invocation. `--quiet`, `--json`, and `--sarif` select output modes and do not silently reset severity, confidence, or finding-count settings.

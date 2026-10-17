@@ -4,10 +4,10 @@
  */
 
 import { createHash } from 'node:crypto';
-import { access, constants, readFile } from 'node:fs/promises';
+import { access, constants, lstat, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { homedir, platform } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 const _require = createRequire(import.meta.url);
 
@@ -35,23 +35,57 @@ export interface CachePaths {
  * Falls back to absolute path + device/inode if no remote URL.
  */
 export async function computeProjectIdentity(repoRoot: string): Promise<string> {
+  const absoluteRepoRoot = resolve(repoRoot);
   let identityString: string;
 
   try {
-    const gitConfigPath = resolve(repoRoot, '.git', 'config');
+    const gitConfigPath = await resolveGitConfigPath(absoluteRepoRoot);
     const configContent = await readFile(gitConfigPath, 'utf-8');
 
     const remoteUrl = extractRemoteUrl(configContent);
     if (remoteUrl) {
-      identityString = `${repoRoot}|${remoteUrl}`;
+      identityString = `${absoluteRepoRoot}|${remoteUrl}`;
     } else {
-      identityString = await fallbackIdentity(repoRoot);
+      identityString = await fallbackIdentity(absoluteRepoRoot);
     }
   } catch {
-    identityString = await fallbackIdentity(repoRoot);
+    identityString = await fallbackIdentity(absoluteRepoRoot);
   }
 
   return createHash('sha256').update(identityString).digest('hex').substring(0, 16);
+}
+
+/**
+ * Resolves the shared Git config path for ordinary repositories and linked worktrees.
+ * A worktree's .git file points at its private gitdir; commondir then points at the
+ * shared gitdir that owns remote configuration.
+ */
+async function resolveGitConfigPath(repoRoot: string): Promise<string> {
+  const gitEntry = resolve(repoRoot, '.git');
+  const entryStat = await lstat(gitEntry);
+  let gitDir = gitEntry;
+
+  if (entryStat.isFile()) {
+    const pointer = await readFile(gitEntry, 'utf-8');
+    const match = /^gitdir:\s*(.+?)\s*$/im.exec(pointer);
+    if (!match?.[1]) throw new Error('Invalid .git pointer file');
+    gitDir = isAbsolute(match[1]) ? resolve(match[1]) : resolve(repoRoot, match[1]);
+  } else if (!entryStat.isDirectory()) {
+    throw new Error('.git is neither a directory nor a pointer file');
+  }
+
+  try {
+    const commonDirValue = (await readFile(resolve(gitDir, 'commondir'), 'utf-8')).trim();
+    if (commonDirValue) {
+      gitDir = isAbsolute(commonDirValue)
+        ? resolve(commonDirValue)
+        : resolve(gitDir, commonDirValue);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+
+  return resolve(gitDir, 'config');
 }
 
 /**
@@ -165,32 +199,47 @@ export function computeConfigHash(config: Record<string, unknown>): string {
  * Normalizes config for hashing by removing defaults and sorting keys.
  */
 function normalizeConfigForHash(config: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(config)) {
-    // Skip known default values
-    if (isDefaultValue(key, value)) continue;
-
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      result[key] = normalizeConfigForHash(value as Record<string, unknown>);
-    } else {
-      result[key] = value;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Checks if a config value is a known default.
- */
-function isDefaultValue(key: string, value: unknown): boolean {
-  const defaults: Record<string, unknown> = {
-    version: '1',
-    severity: 'medium',
-    max_findings: 10,
-    log_level: 'info',
+  const defaults: Record<string, Record<string, unknown>> = {
+    '': {
+      version: '1.0.0',
+      rules: [],
+      ignore: [],
+    },
+    project: { name: 'unnamed-project' },
+    review: {
+      severity: 'medium',
+      failOnSeverity: 'critical',
+      maxFindings: 50,
+      minConfidence: 0.6,
+    },
+    architecture: {
+      boundaries: [],
+      forbiddenDependencies: [],
+    },
   };
 
-  return defaults[key] === value;
+  const normalize = (value: Record<string, unknown>, section: string): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) {
+      const entry = value[key];
+      if (entry === undefined) continue;
+      if (section === '' && key === 'architecture' && entry === null) continue;
+      if (
+        Object.prototype.hasOwnProperty.call(defaults[section] ?? {}, key) &&
+        JSON.stringify(entry) === JSON.stringify(defaults[section]?.[key])
+      ) {
+        continue;
+      }
+
+      if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+        const nested = normalize(entry as Record<string, unknown>, key);
+        if (Object.keys(nested).length > 0) result[key] = nested;
+      } else {
+        result[key] = entry;
+      }
+    }
+    return result;
+  };
+
+  return normalize(config, '');
 }

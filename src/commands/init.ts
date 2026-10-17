@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { ConfigurationError } from '../errors/index.js';
 import { createLogger } from '../logging/index.js';
@@ -10,54 +10,40 @@ const logger = createLogger('commands:init');
  * Generates a commented octate.yaml with all sections and examples.
  */
 function generateConfigContent(projectName: string): string {
-  return `# Octate Configuration
-# See https://octate.dev/config for full documentation
+  const safeProjectName = projectName.replace(/["\\\r\n]/g, (character) => {
+    if (character === '\n') return '\\n';
+    if (character === '\r') return '\\r';
+    return '\\' + character;
+  });
+
+  return `# Octate configuration
+# See https://octate.dev/config for the full reference.
 
 version: "1.0.0"
 
-# Project identification
 project:
-  name: "${projectName}"
-  # description: "My awesome project"  # Optional project description
+  name: "${safeProjectName}"
 
-# Review behavior configuration
 review:
-  # Minimum severity to report: critical, high, medium, low, info
+  # minimum severity to report: critical, high, medium, low, info
   severity: "medium"
-  # Maximum number of findings to report (1-100)
-  max_findings: 50
-  # Enable/disable specific reviewer types (all enabled by default)
-  # reviewers:
-  #   structural: true
-  #   semantic: true
-  #   security: true
+  # threshold for a non-zero exit code
+  failOnSeverity: "critical"
+  # maximum number of findings (1-100)
+  maxFindings: 50
+  # confidence threshold (0-1)
+  minConfidence: 0.6
 
-# Custom rules to apply during review
-# Each rule is a reference to a built-in or custom rule
+# custom rule names
 rules: []
-  # - "no-console-log"
-  # - "require-error-handling"
-  # - "no-hardcoded-secrets"
 
-# Architecture constraints
+# dependency boundaries and forbidden dependency names/patterns
 architecture:
-  # Module boundaries that should not be crossed
-  # boundaries:
-  #   - "src/core"
-  #   - "src/api"
-  # Forbidden dependency patterns (glob patterns)
-  # forbidden_dependencies:
-  #   - "lodash"
-  #   - "moment"
-  #   - "@internal/*"
+  boundaries: []
+  forbiddenDependencies: []
 
-# Additional ignore patterns (extends .gitignore and .octateignore)
-# These patterns are applied during file discovery and diff generation
+# additional glob patterns to ignore during review
 ignore: []
-  # - "*.generated.ts"
-  # - "dist/"
-  # - "vendor/"
-  # - "*.min.js"
 `;
 }
 
@@ -73,7 +59,7 @@ export function createInitCommand(): Command {
     .action(async (repoPath: string, options: { force?: boolean; name?: string }) => {
       const targetDir = resolve(repoPath);
       const configPath = join(targetDir, 'octate.yaml');
-      const projectName = options.name ?? targetDir.split('/').pop() ?? 'unnamed-project';
+      const projectName = options.name?.trim() || basename(targetDir) || 'unnamed-project';
 
       logger.info({ configPath, projectName, force: options.force }, 'Initializing Octate config');
 
