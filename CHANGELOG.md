@@ -2,6 +2,16 @@
 
 All notable changes to Octate are documented here.
 
+## [1.1.1] - 2026-10-17
+
+### Fixed
+
+- Replaced the stale development-version banner in the README with accurate package-version and release-note links.
+- Changed npm package homepage metadata to the official Octate product website.
+- Converted README links to changelog, release notes, configuration, CI/CD, troubleshooting, and benchmark documentation to stable GitHub URLs that work from the published npm README.
+- Added release metadata validation to the package verification workflow so version, homepage, changelog, and release-note links cannot silently drift.
+- Generalized GitHub release automation to validate versioned release notes and explicitly dispatch the npm publisher after creating the GitHub Release.
+
 ## [1.1.0] - 2026-10-17
 
 ### Fixed
