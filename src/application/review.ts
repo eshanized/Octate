@@ -393,7 +393,7 @@ function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boo
  * A missing or invalid workspace manifest disables workspace mapping rather than
  * silently consulting the live worktree's package.json files.
  */
-async function resolveWorkspaceInfosAtScope(
+export async function resolveWorkspaceInfosAtScope(
   repoRoot: string,
   scopeType: ReviewScope['type'],
   headRef: string,
