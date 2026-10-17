@@ -4,6 +4,7 @@
  * emitting the 8 canonical progress events and enforcing cancellation checks.
  */
 
+import { parse as parseYaml } from 'yaml';
 import { collectDiagnostics } from '../analysis/diagnostics/index.js';
 import { parseFiles } from '../analysis/parser/index.js';
 import { extractSymbols } from '../analysis/symbols/index.js';
@@ -17,7 +18,6 @@ import {
   type WorkspaceInfo,
 } from '../intelligence/index.js';
 import { createLogger } from '../logging/index.js';
-import { parse as parseYaml } from 'yaml';
 import { LocalNvidiaProvider } from '../model/index.js';
 import { findGitRoot } from '../repository/discovery.js';
 import { createFileFilter, shouldReviewSnapshotContent } from '../repository/filter.js';
@@ -376,7 +376,9 @@ function matchesWorkspacePattern(workspacePath: string, rawPattern: string): boo
     } else if (character === '?') {
       expression += '[^/]';
     } else {
-      expression += regexSpecial.includes(character) ? String.fromCharCode(92) + character : character;
+      expression += regexSpecial.includes(character)
+        ? String.fromCharCode(92) + character
+        : character;
     }
   }
 
@@ -442,7 +444,9 @@ export async function resolveWorkspaceInfosAtScope(
     const rootPackage = await readSnapshotJson('package.json');
     const workspaces = rootPackage?.workspaces;
     if (Array.isArray(workspaces)) {
-      workspacePatterns = workspaces.filter((pattern): pattern is string => typeof pattern === 'string');
+      workspacePatterns = workspaces.filter(
+        (pattern): pattern is string => typeof pattern === 'string'
+      );
     } else if (
       workspaces &&
       typeof workspaces === 'object' &&
@@ -475,7 +479,7 @@ export async function resolveWorkspaceInfosAtScope(
 
   const workspaces: WorkspaceInfo[] = [];
   for (const workspaceDir of Array.from(workspaceDirs).sort()) {
-    const packageJson = await readSnapshotJson(workspaceDir + '/package.json');
+    const packageJson = await readSnapshotJson(`${workspaceDir}/package.json`);
     const name = packageJson?.name;
     if (typeof name === 'string' && name.trim()) {
       workspaces.push({ name: name.trim(), path: workspaceDir });
