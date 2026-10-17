@@ -124,10 +124,12 @@ describe('renderers:tui:renderer', () => {
     const loadFileContents = jest.fn(async (filePaths: readonly string[]) =>
       new Map(filePaths.map((filePath) => [filePath, `snapshot content for ${filePath}`]))
     );
+    const loadDiff = jest.fn(async () => 'diff from the reviewed snapshot');
     const renderer = new InteractiveTuiRenderer({
       stream: mockStream,
       failOn: 'high',
       loadFileContents,
+      loadDiff,
     });
 
     renderer.start();
@@ -135,6 +137,7 @@ describe('renderers:tui:renderer', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(loadFileContents).toHaveBeenCalledWith(['src/app.ts']);
+    expect(loadDiff).toHaveBeenCalledTimes(1);
 
     renderer.exit();
     await renderPromise;
