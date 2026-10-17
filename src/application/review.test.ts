@@ -149,11 +149,15 @@ describe('application:review', () => {
 
     await fs.writeFile(filePath, 'export const snapshotValue = "WORKTREE_VERSION";\n');
 
-    await useCase.execute({
+    const result = await useCase.execute({
       repoRoot: testDir,
       modelOverride: model,
       scopeOptions: { type: 'commit', repoRoot: testDir, commit: commitOid },
     });
+
+    expect(result.metadata.warnings).toContain(
+      'Filesystem-based diagnostics were skipped because they cannot safely analyze a historical Git snapshot.'
+    );
 
     const recordedRequests = JSON.stringify(model.calls);
     expect(recordedRequests).toContain('COMMITTED_VERSION');
