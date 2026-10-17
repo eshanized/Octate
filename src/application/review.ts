@@ -183,8 +183,45 @@ export class ReviewUseCase {
       scope.type,
       scope.head ?? 'HEAD'
     );
+    const snapshotTsConfig = await readFileAtReviewScope(
+      repoRoot,
+      scope.type,
+      scope.head ?? 'HEAD',
+      'tsconfig.json'
+    );
+    let tsconfigPaths: Record<string, string[]> = {};
+    let baseUrl = '.';
+    if (snapshotTsConfig) {
+      try {
+        const stripped = snapshotTsConfig
+          .replace(/\\/\\/.*$/gm, '')
+          .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')
+          .replace(/,(\\s*[}\\]])/g, '$1');
+        const parsed = JSON.parse(stripped) as {
+          compilerOptions?: { paths?: unknown; baseUrl?: unknown };
+        };
+        const paths = parsed.compilerOptions?.paths;
+        if (paths && typeof paths === 'object' && !Array.isArray(paths)) {
+          for (const [key, targets] of Object.entries(paths)) {
+            if (Array.isArray(targets) && targets.every((target) => typeof target === 'string')) {
+              tsconfigPaths[key] = targets;
+            }
+          }
+        }
+        const configuredBaseUrl = parsed.compilerOptions?.baseUrl;
+        if (typeof configuredBaseUrl === 'string') baseUrl = configuredBaseUrl;
+      } catch (error) {
+        logger.warn(
+          { scopeType: scope.type, error },
+          'Unable to parse tsconfig.json from the reviewed snapshot; path aliases are disabled'
+        );
+      }
+    }
+
     const pathResolver = await createPathResolver(repoRoot, {
       knownFiles: new Set(snapshotPaths),
+      tsconfigPaths,
+      baseUrl,
     });
     const referenceGraph = createReferenceGraph(
       parseResult.files,
