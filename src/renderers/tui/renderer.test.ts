@@ -115,4 +115,51 @@ describe('renderers:tui:renderer', () => {
     const stderr = mockStderr.join('');
     expect(stderr).toContain('1 blocking findings (exit 1)');
   });
+
+  it('loads finding source from the configured review snapshot loader', async () => {
+    const critFinding = createMockFinding('critical', {
+      id: 'snapshot-finding',
+      compositeScore: 95,
+    });
+    const loadFileContents = jest.fn(async (filePaths: readonly string[]) =>
+      new Map(filePaths.map((filePath) => [filePath, `snapshot content for ${filePath}`]))
+    );
+    const renderer = new InteractiveTuiRenderer({
+      stream: mockStream,
+      failOn: 'high',
+      loadFileContents,
+    });
+
+    renderer.start();
+    const renderPromise = renderer.render(createMockReviewResult([critFinding]));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(loadFileContents).toHaveBeenCalledWith(['src/app.ts']);
+
+    renderer.exit();
+    await renderPromise;
+  });
+
+  it('calculates the final exit code from the latest re-review result', async () => {
+    const initialResult = createMockReviewResult([]);
+    const criticalFinding = createMockFinding('critical', {
+      id: 'latest-critical',
+      compositeScore: 95,
+    });
+    const latestResult = createMockReviewResult([criticalFinding]);
+    const renderer = new InteractiveTuiRenderer({
+      stream: mockStream,
+      failOn: 'high',
+    });
+
+    renderer.start();
+    const renderPromise = renderer.render(initialResult);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await renderer.updateResult(latestResult);
+    renderer.exit();
+    await renderPromise;
+
+    expect(process.exitCode).toBe(1);
+    expect(mockStderr.join('')).toContain('1 blocking findings (exit 1)');
+  });
 });
