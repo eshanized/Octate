@@ -121,8 +121,9 @@ describe('renderers:tui:renderer', () => {
       id: 'snapshot-finding',
       compositeScore: 95,
     });
-    const loadFileContents = jest.fn(async (filePaths: readonly string[]) =>
-      new Map(filePaths.map((filePath) => [filePath, `snapshot content for ${filePath}`]))
+    const loadFileContents = jest.fn(
+      async (filePaths: readonly string[]) =>
+        new Map(filePaths.map((filePath) => [filePath, `snapshot content for ${filePath}`]))
     );
     const loadDiff = jest.fn(async () => 'diff from the reviewed snapshot');
     const renderer = new InteractiveTuiRenderer({
