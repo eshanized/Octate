@@ -138,7 +138,7 @@ describe('renderers:tui:renderer', () => {
     const renderPromise = renderer.render(createMockReviewResult([critFinding]));
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(loadFileContents).toHaveBeenCalledWith(['src/app.ts']);
+    expect(loadFileContents).toHaveBeenCalledWith(['src/app.ts', 'src/index.ts']);
     expect(loadDiff).toHaveBeenCalledTimes(1);
 
     renderer.exit();
