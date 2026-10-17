@@ -305,7 +305,7 @@ describe('Git operations', () => {
   describe('listFilesAtReviewScope', () => {
     it('lists files from the reviewed commit, excluding later worktree-only files', async () => {
       const head = await resolveRef(testDir, 'HEAD');
-      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const later = true;\\n');
+      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const later = true;\n');
 
       const files = await listFilesAtReviewScope(testDir, 'commit', head);
 
@@ -315,9 +315,9 @@ describe('Git operations', () => {
     });
 
     it('lists staged index paths rather than unstaged additions', async () => {
-      await fs.writeFile(path.join(testDir, 'staged-only.ts'), 'export const staged = true;\\n');
+      await fs.writeFile(path.join(testDir, 'staged-only.ts'), 'export const staged = true;\n');
       await git.add({ fs, dir: testDir, filepath: 'staged-only.ts' });
-      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const unstaged = true;\\n');
+      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const unstaged = true;\n');
 
       const files = await listFilesAtReviewScope(testDir, 'staged', 'INDEX');
 
@@ -326,7 +326,7 @@ describe('Git operations', () => {
     });
 
     it('includes untracked files visible in the working-tree snapshot', async () => {
-      await fs.writeFile(path.join(testDir, 'untracked.ts'), 'export const untracked = true;\\n');
+      await fs.writeFile(path.join(testDir, 'untracked.ts'), 'export const untracked = true;\n');
 
       const files = await listFilesAtReviewScope(testDir, 'working-tree', 'WORKDIR');
 
