@@ -25,7 +25,9 @@ const releaseNotes = readText(releaseNotesPath);
 const runtimeVersion = runtimeSource.match(/export const OCTATE_VERSION = '([^']+)';/)?.[1];
 
 if (runtimeVersion !== manifest.version) {
-  fail(`package.json version ${manifest.version} does not match runtime version ${runtimeVersion ?? 'not found'}.`);
+  fail(
+    `package.json version ${manifest.version} does not match runtime version ${runtimeVersion ?? 'not found'}.`
+  );
 }
 
 if (manifest.homepage !== 'https://octate.tonmoyinfrastructure.org/') {
@@ -49,9 +51,12 @@ if (/Current development version|Release publication follows the passing release
   fail('README.md still contains the stale development-version banner.');
 }
 
-const relativeDocumentationLinks = readme.match(/\]\((?:CHANGELOG\.md|docs\/[^)]+|\.planning\/[^)]+)\)/g) ?? [];
+const relativeDocumentationLinks =
+  readme.match(/\]\((?:CHANGELOG\.md|docs\/[^)]+|\.planning\/[^)]+)\)/g) ?? [];
 if (relativeDocumentationLinks.length > 0) {
-  fail(`README.md contains documentation links that may be broken on npm: ${relativeDocumentationLinks.join(', ')}.`);
+  fail(
+    `README.md contains documentation links that may be broken on npm: ${relativeDocumentationLinks.join(', ')}.`
+  );
 }
 
 if (!releaseNotes.includes(`@tiverse/octate@${manifest.version}`)) {
