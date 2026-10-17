@@ -19,6 +19,7 @@ export interface InteractiveTuiOptions extends RendererOptions {
   onReReview?: (() => Promise<void>) | undefined;
   fileContents?: Map<string, string> | undefined;
   loadFileContents?: ((filePaths: readonly string[]) => Promise<Map<string, string>>) | undefined;
+  loadDiff?: (() => Promise<string>) | undefined;
   diffText?: string | undefined;
 }
 
@@ -142,10 +143,10 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
       }
     }
 
-    this.actionEmitter.emit('data', {
-      fileContents,
-      diffText: this.options.diffText ?? '',
-    });
+    const diffText = this.options.loadDiff
+      ? await this.options.loadDiff()
+      : (this.options.diffText ?? '');
+    this.actionEmitter.emit('data', { fileContents, diffText });
     this.dispatchResult(result);
   }
 
