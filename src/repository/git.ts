@@ -920,6 +920,56 @@ export async function readFileAtReviewScope(
 }
 
 /**
+ * Lists regular files visible in the exact snapshot used by a review.
+ * Historical scopes are walked from the target commit tree, staged scopes use
+ * stage-0 index entries, and working-tree scopes use the Git workdir adapter.
+ */
+export async function listFilesAtReviewScope(
+  repoRoot: string,
+  scopeType: ReviewScope['type'],
+  headRef: string
+): Promise<string[]> {
+  const gitDir = await findGitDir(repoRoot);
+
+  if (scopeType === 'staged') {
+    return Array.from((await readIndexOids(gitDir)).keys()).sort();
+  }
+
+  if (scopeType === 'working-tree') {
+    const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
+    return matrix
+      .filter((entry) => entry[2] !== 0)
+      .map(([filepath]) => filepath)
+      .sort();
+  }
+
+  const commitOid = await resolveRef(repoRoot, headRef);
+  const commit = await git.readCommit({
+    fs: fsAdapter,
+    dir: repoRoot,
+    gitdir: gitDir,
+    oid: commitOid,
+  });
+  const files = new Set<string>();
+
+  await git.walk({
+    fs: fsAdapter,
+    dir: repoRoot,
+    gitdir: gitDir,
+    trees: [git.TREE({ ref: commit.commit.tree })],
+    map: async (filepath, entries) => {
+      if (filepath === '.') return;
+      const entry = entries[0];
+      if (entry && (await entry.type()) === 'blob') {
+        files.add(filepath);
+      }
+    },
+  });
+
+  return Array.from(files).sort();
+}
+
+/**
  * Lists staged file changes by comparing HEAD with stage-0 index entries.
  */
 export async function getStagedFiles(repoRoot: string): Promise<FileChange[]> {

@@ -19,7 +19,8 @@ import { createRenderer, type OutputFormat } from '../renderers/index.js';
 import { InteractiveTuiRenderer } from '../renderers/tui/renderer.js';
 import { shouldUseTui } from '../renderers/tui/terminal.js';
 import { findGitRoot } from '../repository/discovery.js';
-import { parseRange, type resolveScope, type ScopeOptions } from '../repository/scope.js';
+import { readFileAtReviewScope } from '../repository/git.js';
+import { parseRange, resolveScope, type ScopeOptions } from '../repository/scope.js';
 import type { ReviewResult } from '../review/types.js';
 
 const logger = createLogger('commands:review');
@@ -56,9 +57,15 @@ export function createReviewCommand(): Command {
     )
     .option('--output <file>', 'Write output to file instead of stdout')
     .option('--no-tui', 'Disable interactive TUI (use with --json/--sarif/--quiet)')
-    .action(async (refs: string[], options: ReviewOptions) => {
+    .action(async (refs: string[], options: ReviewOptions, command: Command) => {
       const controller = createCancellationController();
-      await runReview(controller, refs, options);
+      // Commander exposes inherited root flags through optsWithGlobals(); do not
+      // depend on mutating a command's local options object in a lifecycle hook.
+      const effectiveOptions = {
+        ...command.optsWithGlobals(),
+        ...options,
+      } as ReviewOptions;
+      await runReview(controller, refs, effectiveOptions);
     });
 
   return cmd;
@@ -236,10 +243,41 @@ export async function runReview(
       const effectiveFailOn: ReviewFailOnSeverity =
         options.failOn ?? config.review.failOnSeverity ?? 'critical';
 
+      const snapshotHeadRef =
+        scopeOptions.type === 'working-tree'
+          ? 'WORKDIR'
+          : scopeOptions.type === 'staged'
+            ? 'INDEX'
+            : scopeOptions.type === 'commit'
+              ? (scopeOptions.commit ?? 'HEAD')
+              : scopeOptions.type === 'range'
+                ? (scopeOptions.head ?? 'HEAD')
+                : (scopeOptions.branch ?? 'HEAD');
+
+      const loadSnapshotFileContents = async (
+        filePaths: readonly string[]
+      ): Promise<Map<string, string>> => {
+        const contents = new Map<string, string>();
+        await Promise.all(
+          filePaths.map(async (filePath) => {
+            const content = await readFileAtReviewScope(
+              repoRoot,
+              scopeOptions.type,
+              snapshotHeadRef,
+              filePath
+            );
+            if (content !== null) contents.set(filePath, content);
+          })
+        );
+        return contents;
+      };
+
       const tuiRenderer = new InteractiveTuiRenderer({
         repoRoot,
         scopeType: options.staged ? 'staged' : refs.length > 0 ? 'ref' : 'workspace',
         failOn: effectiveFailOn,
+        loadFileContents: loadSnapshotFileContents,
+        loadDiff: async () => (await resolveScope(scopeOptions)).diff,
         onReReview: async () => {
           const freshResult = await useCase.execute({
             repoRoot,
@@ -249,7 +287,7 @@ export async function runReview(
             signal: controller.signal,
             onProgress: (event) => tuiRenderer.dispatchProgress(event),
           });
-          tuiRenderer.dispatchResult(freshResult);
+          await tuiRenderer.updateResult(freshResult);
         },
       });
 

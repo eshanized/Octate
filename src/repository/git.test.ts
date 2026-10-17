@@ -16,6 +16,7 @@ import {
   getStatus,
   getWorkingDiff,
   getWorkingFiles,
+  listFilesAtReviewScope,
   resolveRef,
 } from './git.js';
 
@@ -298,6 +299,39 @@ describe('Git operations', () => {
       const modifiedFile = changes.find((c) => c.path === 'README.md');
       expect(modifiedFile).toBeDefined();
       expect(modifiedFile?.status).toBe('modified');
+    });
+  });
+
+  describe('listFilesAtReviewScope', () => {
+    it('lists files from the reviewed commit, excluding later worktree-only files', async () => {
+      const head = await resolveRef(testDir, 'HEAD');
+      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const later = true;\n');
+
+      const files = await listFilesAtReviewScope(testDir, 'commit', head);
+
+      expect(files).toContain('README.md');
+      expect(files).toContain('file1.ts');
+      expect(files).not.toContain('worktree-only.ts');
+    });
+
+    it('lists staged index paths rather than unstaged additions', async () => {
+      await fs.writeFile(path.join(testDir, 'staged-only.ts'), 'export const staged = true;\n');
+      await git.add({ fs, dir: testDir, filepath: 'staged-only.ts' });
+      await fs.writeFile(path.join(testDir, 'worktree-only.ts'), 'export const unstaged = true;\n');
+
+      const files = await listFilesAtReviewScope(testDir, 'staged', 'INDEX');
+
+      expect(files).toContain('staged-only.ts');
+      expect(files).not.toContain('worktree-only.ts');
+    });
+
+    it('includes untracked files visible in the working-tree snapshot', async () => {
+      await fs.writeFile(path.join(testDir, 'untracked.ts'), 'export const untracked = true;\n');
+
+      const files = await listFilesAtReviewScope(testDir, 'working-tree', 'WORKDIR');
+
+      expect(files).toContain('untracked.ts');
+      expect(files).toContain('README.md');
     });
   });
 

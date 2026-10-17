@@ -41,6 +41,20 @@ describe('renderers:console', () => {
     expect(stream.content).toContain('Total findings: 0');
   });
 
+  it('renders pipeline warnings when review stages were skipped or failed', async () => {
+    const stream = new MemoryWritable();
+    const renderer = new ConsoleRenderer({ stream });
+    const result = createMockReviewResult([]);
+    result.metadata.warnings = [
+      'Filesystem-based diagnostics were skipped because they cannot safely analyze a historical Git snapshot.',
+    ];
+
+    await renderer.render(result);
+
+    expect(stream.content).toContain('Review warnings');
+    expect(stream.content).toContain('Filesystem-based diagnostics were skipped');
+  });
+
   it('renders findings with badges, title, message, and suggested fix', async () => {
     const stream = new MemoryWritable();
     const renderer = new ConsoleRenderer({ stream });

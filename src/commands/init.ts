@@ -17,7 +17,7 @@ function generateConfigContent(projectName: string): string {
   });
 
   return `# Octate configuration
-# See https://octate.dev/config for the full reference.
+# See https://github.com/eshanized/Octate/blob/main/docs/configuration.md for the full reference.
 
 version: "1.0.0"
 

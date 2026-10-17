@@ -55,6 +55,15 @@ export class ConsoleRenderer implements ReviewRenderer {
     lines.push(`Total findings: ${result.summary.totalFindings}`);
     lines.push('');
 
+    const warnings = result.metadata.warnings ?? [];
+    if (warnings.length > 0) {
+      lines.push(pc.yellow('⚠ Review warnings'));
+      for (const warning of warnings) {
+        lines.push(`  - ${warning}`);
+      }
+      lines.push('');
+    }
+
     if (result.findings.length === 0) {
       lines.push(pc.green('✓ No issues found'));
     } else {

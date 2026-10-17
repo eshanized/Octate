@@ -84,7 +84,7 @@ describe('renderers:sarif', () => {
     const run = sarif.runs[0];
     expect(run.tool.driver.name).toBe('Octate');
     expect(run.tool.driver.version).toBe('1.0.0');
-    expect(run.tool.driver.informationUri).toBe('https://octate.dev');
+    expect(run.tool.driver.informationUri).toBe('https://octate.tonmoyinfrastructure.org/');
 
     // Distinct rules registered for security and maintainability
     const ruleIds = run.tool.driver.rules.map((r: { id: string }) => r.id);
