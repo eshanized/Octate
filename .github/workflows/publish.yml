@@ -17,7 +17,7 @@ on:
         type: string
 
 concurrency:
-  group: npm-publish-${{ github.event.release.tag_name || inputs.version || github.ref_name }}
+  group: npm-publish-${{ github.event.release.tag_name || format('v{0}', inputs.version) || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
