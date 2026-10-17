@@ -172,6 +172,10 @@ export class InteractiveTuiRenderer implements ReviewRenderer {
     process.exitCode = finalBlockingCount > 0 ? 1 : 0;
 
     const stream = process.stderr;
+    for (const warning of finalResult.metadata.warnings ?? []) {
+      stream.write(pc.yellow(`Octate warning: ${warning}\n`));
+    }
+
     if (finalBlockingCount > 0) {
       stream.write(
         pc.red(`\nOctate review finished: ${finalBlockingCount} blocking findings (exit 1)\n`)
