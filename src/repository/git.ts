@@ -935,30 +935,33 @@ export async function listFilesAtReviewScope(
     return Array.from((await readIndexOids(gitDir)).keys()).sort();
   }
 
-  let treeRef: string | undefined;
-  if (scopeType !== 'working-tree') {
-    const commitOid = await resolveRef(repoRoot, headRef);
-    const commit = await git.readCommit({
-      fs: fsAdapter,
-      dir: repoRoot,
-      gitdir: gitDir,
-      oid: commitOid,
-    });
-    treeRef = commit.commit.tree;
+  if (scopeType === 'working-tree') {
+    const matrix = await git.statusMatrix({ fs: fsAdapter, dir: repoRoot, gitdir: gitDir });
+    return matrix
+      .filter((entry) => entry[2] !== 0)
+      .map(([filepath]) => filepath.split('\\\\').join('/'))
+      .sort();
   }
-  const targetTrees = treeRef ? [git.TREE({ ref: treeRef })] : [git.WORKDIR()];
 
+  const commitOid = await resolveRef(repoRoot, headRef);
+  const commit = await git.readCommit({
+    fs: fsAdapter,
+    dir: repoRoot,
+    gitdir: gitDir,
+    oid: commitOid,
+  });
   const files = new Set<string>();
+
   await git.walk({
     fs: fsAdapter,
     dir: repoRoot,
     gitdir: gitDir,
-    trees: targetTrees,
+    trees: [git.TREE({ ref: commit.commit.tree })],
     map: async (filepath, entries) => {
       if (filepath === '.') return;
       const entry = entries[0];
       if (entry && (await entry.type()) === 'blob') {
-        files.add(filepath.split(path.sep).join('/'));
+        files.add(filepath.split('\\\\').join('/'));
       }
     },
   });
