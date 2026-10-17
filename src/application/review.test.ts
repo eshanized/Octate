@@ -9,7 +9,7 @@ import * as git from 'isomorphic-git';
 import { DefaultConfig } from '../config/schema.js';
 import { listFilesAtReviewScope } from '../repository/git.js';
 import { createTestFinding, MockReviewModel } from '../review/__tests__/mocks.js';
-import { createReviewUseCase, resolveWorkspaceInfosAtScope, ReviewUseCase } from './review.js';
+import { createReviewUseCase, ReviewUseCase, resolveWorkspaceInfosAtScope } from './review.js';
 import type { CanonicalReviewStage, ReviewProgressEvent } from './types.js';
 
 describe('application:review', () => {
