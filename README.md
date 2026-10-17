@@ -40,7 +40,7 @@ export NVIDIA_API_KEY="your-nvidia-api-key"
 npx @tiverse/octate review
 ```
 
-Without `NVIDIA_API_KEY`, AI-backed review cannot run. Static analysis and diagnostics may still be available through their individual commands and tools.
+Without `NVIDIA_API_KEY`, AI-backed review will fail with an authentication error. Run `octate doctor` first to verify environment readiness.
 
 Or install globally:
 
